@@ -268,19 +268,8 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     }
   }
 
-  function pathSteps(result) {
-    return result.assignments.flatMap((a) => {
-      const r = remaining.find((x) => x.raceId === a.raceId);
-      const chips = [];
-      if (a.racePosition) chips.push(`<b>P${a.racePosition}</b>`);
-      if (a.sprintPosition) chips.push(`<b class="sprint">Sprint P${a.sprintPosition}</b>`);
-      if (chips.length === 0) return [];
-      return [`<li><span class="step-round">${r.name.replace(/ 2026$/, "")}</span><span class="chips">${chips.join("")}</span></li>`];
-    });
-  }
-
-  function statRow(cells) {
-    return `<div class="stat-row">${cells.map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("")}</div>`;
+  function statRow(cells, slim = false) {
+    return `<div class="stat-row${slim ? " slim" : ""}">${cells.map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("")}</div>`;
   }
 
   function bar(havePct, needPct, label) {
@@ -312,13 +301,14 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
         ${bar(havePct, 0, `${me.label} already holds P${target}`)}
         <p class="bar-cap">${me.label} already holds P${target} — nothing more needed.</p>`;
     } else {
-      const steps = pathSteps(result);
+      const gpAvail = remaining.length * RACE_POINTS[0];
+      const sprintAvail = remaining.filter((r) => r.sprint).length * SPRINT_POINTS[0];
       answerEl.dataset.state = "path";
       answerEl.innerHTML = `
         ${statRow([[`+${result.pointsNeeded}`, "Needed"], [final, "Finishes on"], [`P${target}`, "Target"]])}
         ${bar(havePct, needPct, `${me.label} needs ${result.pointsNeeded} more points`)}
-        <p class="bar-cap">${result.winsAdded > 0 ? `Includes ${result.winsAdded} win${result.winsAdded === 1 ? "" : "s"}. ` : ""}Best case — rivals score nothing more.</p>
-        <ol class="path">${steps.join("")}</ol>`;
+        ${statRow([[gpAvail, "Grand Prix pts available"], [sprintAvail, "Sprint pts available"]], true)}
+        <p class="bar-cap">${result.winsAdded > 0 ? `Includes ${result.winsAdded} win${result.winsAdded === 1 ? "" : "s"}. ` : ""}Best case — rivals score nothing more.</p>`;
     }
   }
 
@@ -524,6 +514,8 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   .answer[data-state="holds"] { border-left-color: var(--good); }
   .answer[data-state="impossible"] { border-left-color: var(--bad); }
   .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.7rem; }
+  .stat-row.slim { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-row.slim .stat b { font-size: 1.05rem; }
   .stat {
     background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
     padding: 0.5rem 0.4rem; text-align: center;
@@ -538,16 +530,6 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   .bar .have { background: var(--muted); }
   .bar .need { background: var(--f1red); }
   .bar-cap { margin: 0 0 0.7rem; font-size: 0.78rem; color: var(--faint); }
-  .path { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
-  .path li {
-    display: flex; justify-content: space-between; align-items: center; gap: 0.6rem;
-    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-    padding: 0.45rem 0.6rem; font-size: 0.85rem;
-  }
-  .step-round { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
-  .chips { display: flex; gap: 0.3rem; flex: none; }
-  .chips b { background: var(--f1red); color: #fff; border-radius: 6px; padding: 0.1rem 0.45rem; font-style: italic; font-size: 0.78rem; }
-  .chips b.sprint { background: transparent; border: 1px solid var(--f1red-ink); color: var(--f1red-ink); }
 
   /* Scenario builder below the solver */
   .builder { margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
