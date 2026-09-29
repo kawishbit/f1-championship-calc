@@ -1,10 +1,10 @@
 # 04: Clinch indicator
 
-**What to build:** Selecting a driver (or team) answers "what would it take": the page shows whether they have clinched, are still alive, or are eliminated given the current scenario.
+**What to build:** Selecting a contender answers "what would it take": when the least-effort path needs zero points the page shows the target as already secured; when no path reaches the target it shows the best reachable position. The P1 answer doubles as the title-clinch readout.
 
 **Blocked by:** 03 (Scenario playground).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Selecting a driver/team shows clinch state: clinched, alive, or eliminated under the current scenario
-- [ ] Uses the glossary definition of clinch (mathematical certainty regardless of all other remaining outcomes)
+- [x] Zero-point answer reads as already secured; impossible target shows best reachable position
+- [x] Uses the glossary definition of clinch (mathematical certainty regardless of all other remaining outcomes)
