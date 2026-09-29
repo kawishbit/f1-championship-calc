@@ -141,3 +141,12 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Astro build output
+.astro/
+
+# macOS-specific files
+.DS_Store
+
+# JetBrains settings
+.idea/
