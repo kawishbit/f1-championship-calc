@@ -223,6 +223,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
        li.addEventListener("dragleave", () => li.classList.remove("drop-target"));
        li.addEventListener("drop", (ev) => {
          ev.preventDefault();
+         const details = list.closest("details.round");
          const from = ev.dataTransfer.getData("text/plain");
          const ids = [...list.querySelectorAll(".order-row")].map((x) => x.dataset.id).filter((x) => x !== from);
          const to = [...list.querySelectorAll(".order-row")].map((x) => x.dataset.id).indexOf(li.dataset.id) + 1;
@@ -231,17 +232,19 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
          picks[key] = ids;
          picks.touched = true;
          afterPick(list, picks);
+         requestAnimationFrame(() => details?.querySelector(`[data-id="${from}"]`)?.focus());
        });
        li.addEventListener("keydown", (ev) => {
          const rows = [...list.querySelectorAll(".order-row")].map((x) => x.dataset.id);
          const cur = rows.indexOf(e.id) + 1;
          const move = (to) => {
+           const details = list.closest("details.round");
            const next = rows.filter((x) => x !== e.id);
            next.splice(to - 1, 0, e.id);
            picks[key] = next;
            picks.touched = true;
            afterPick(list, picks);
-           list.closest("details.round")?.querySelector(`[data-id="${e.id}"]`)?.focus();
+           requestAnimationFrame(() => details?.querySelector(`[data-id="${e.id}"]`)?.focus());
          };
          if (ev.key === "ArrowUp" && cur > 1) {
            ev.preventDefault();
@@ -467,12 +470,14 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
      for (const r of remaining) {
        // Ordered insert over the current field: others shift down, tail drops.
        // Sprint copies the race order when the finish scores (top 8).
-       const cur = scenario[r.raceId].race.length ? scenario[r.raceId].race : entries().map((e) => e.id);
-       scenario[r.raceId].race = insertPick(cur, id, pos, N_DRIVERS);
+       // Strip the driver first: insertPick shifts the removal null along,
+       // which would leave a gap and drop the tail when already at target.
+       const field = scenario[r.raceId].race.length ? scenario[r.raceId].race : entries().map((e) => e.id);
+       scenario[r.raceId].race = insertPick(field.filter((x) => x && x !== id), id, pos, N_DRIVERS);
        scenario[r.raceId].touched = true;
        if (r.sprint && pos <= 8) {
-         const sCur = scenario[r.raceId].sprint.length ? scenario[r.raceId].sprint : scenario[r.raceId].race.slice();
-         scenario[r.raceId].sprint = insertPick(sCur, id, pos, POINTS.sprint.length);
+         const sField = scenario[r.raceId].sprint.length ? scenario[r.raceId].sprint : scenario[r.raceId].race.slice();
+         scenario[r.raceId].sprint = insertPick(sField.filter((x) => x && x !== id), id, pos, POINTS.sprint.length);
        }
      }
      buildRounds(entries());
