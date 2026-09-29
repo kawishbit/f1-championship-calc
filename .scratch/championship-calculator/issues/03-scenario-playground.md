@@ -6,6 +6,6 @@
 
 **Status:** done
 
-- [x] Points-available section above solver (200 Grand Prix pts, 8 Sprint pts with Singapore sprint note); sprint flag fixed via override after API check
+- [x] Points-available section above solver (200 Grand Prix pts, 8 Sprint pts with Singapore sprint note); sprint flags from Jolpica API, no manual overrides
 - [x] Solver shows needed / finishes-on / target + bar only; scenario bulk-fill + fine-tune project into the left standings with moved-row outlines and pointing notes
 - [x] Works for both drivers and constructors views

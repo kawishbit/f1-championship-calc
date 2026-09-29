@@ -1,6 +1,6 @@
-// Build-time data snapshot: f1api.dev (standings + schedule) + OpenF1 (headshots + team colours).
-// Output: src/data/snapshot.json (checked in, offline fallback) + public/drivers/*.png.
-// Usage: pnpm run snapshot
+ // Build-time data snapshot: f1api.dev (standings + schedule) + OpenF1 (headshots + team colours) + Jolpica (sprint flags).
+ // Output: src/data/snapshot.json (checked in, offline fallback) + public/drivers/*.png.
+ // Usage: pnpm run snapshot
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,14 +28,18 @@ async function getBytes(url) {
 const season = (await getJson("https://f1api.dev/api/current")).season;
 console.log(`season: ${season}`);
 
-const [driversChamp, teamsChamp, teams, drivers, current, openf1] = await Promise.all([
-  getJson(`https://f1api.dev/api/${season}/drivers-championship`),
-  getJson(`https://f1api.dev/api/${season}/constructors-championship`),
-  getJson(`https://f1api.dev/api/${season}/teams`),
-  getJson(`https://f1api.dev/api/${season}/drivers`),
-  getJson("https://f1api.dev/api/current"),
-  getJson("https://api.openf1.org/v1/drivers?session_key=latest"),
-]);
+ const [driversChamp, teamsChamp, teams, drivers, current, openf1, jolpica] = await Promise.all([
+   getJson(`https://f1api.dev/api/${season}/drivers-championship`),
+   getJson(`https://f1api.dev/api/${season}/constructors-championship`),
+   getJson(`https://f1api.dev/api/${season}/teams`),
+   getJson(`https://f1api.dev/api/${season}/drivers`),
+   getJson("https://f1api.dev/api/current"),
+   getJson("https://api.openf1.org/v1/drivers?session_key=latest"),
+   getJson(`https://api.jolpi.ca/ergast/f1/${season}.json?limit=100`).catch((err) => {
+     console.log(`jolpica failed, falling back to f1api sprint flags: ${err.message}`);
+     return null;
+   }),
+ ]);
 
 const byCode = new Map();
 for (const d of openf1) byCode.set(d.name_acronym, d);
@@ -93,28 +97,35 @@ const outTeams = teamsChamp.constructors_championship.map((row) => ({
   position: row.position,
 }));
 
-// f1api.dev schedule data lags for future sprints: Singapore 2026 is officially
-// a sprint (FIA/BBC, 16 Sep 2025: China, Miami, Canada, Britain, Netherlands,
-// Singapore) but ships with sprintRace.date: null. Authoritative overrides win.
-const SPRINT_OVERRIDES = { singapore_2026: true };
+ // Sprint flags: Jolpica (Ergast-compatible) marks future sprints via the `Sprint`
+ // object per race, while f1api.dev leaves sprintRace.date null until the weekend
+ // happens. Jolpica wins when present; f1api is the fallback. Matched by round
+ // number, since both follow official calendar order.
+ const jolpicaSprintRounds = new Set(
+   (jolpica?.MRData?.RaceTable?.Races ?? [])
+     .filter((r) => r.Sprint != null)
+     .map((r) => Number(r.round)),
+ );
+ if (jolpica) console.log(`sprint source: jolpica (${jolpicaSprintRounds.size} sprints)`);
+ else console.log("sprint source: f1api.dev fallback");
 
-const rounds = current.races.map((r) => ({
-  raceId: r.raceId,
-  name: (r.raceName ?? r.raceId).replace(/^Formula 1\s+/, ""),
-  round: r.round,
-  date: r.schedule?.race?.date ?? null,
-  sprint: SPRINT_OVERRIDES[r.raceId] ?? Boolean(r.schedule?.sprintRace?.date),
-  played: Boolean(r.winner),
-}));
+ const rounds = current.races.map((r) => ({
+   raceId: r.raceId,
+   name: (r.raceName ?? r.raceId).replace(/^Formula 1\s+/, ""),
+   round: r.round,
+   date: r.schedule?.race?.date ?? null,
+   sprint: jolpica ? jolpicaSprintRounds.has(Number(r.round)) : Boolean(r.schedule?.sprintRace?.date),
+   played: Boolean(r.winner),
+ }));
 
-const snapshot = {
-  season,
-  generatedAt: new Date().toISOString(),
-  sources: ["https://f1api.dev", "https://api.openf1.org"],
-  drivers: outDrivers,
-  teams: outTeams,
-  rounds,
-};
+ const snapshot = {
+   season,
+   generatedAt: new Date().toISOString(),
+   sources: ["https://f1api.dev", "https://api.openf1.org", "https://api.jolpi.ca/ergast"],
+   drivers: outDrivers,
+   teams: outTeams,
+   rounds,
+ };
 
 await mkdir(path.join(root, "src/data"), { recursive: true });
 await writeFile(

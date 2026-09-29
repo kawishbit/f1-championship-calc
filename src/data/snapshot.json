@@ -1,9 +1,10 @@
 {
   "season": 2026,
-  "generatedAt": "2026-09-29T10:43:21.456Z",
+  "generatedAt": "2026-09-29T14:35:03.908Z",
   "sources": [
     "https://f1api.dev",
-    "https://api.openf1.org"
+    "https://api.openf1.org",
+    "https://api.jolpi.ca/ergast"
   ],
   "drivers": [
     {
