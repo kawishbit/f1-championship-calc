@@ -33,28 +33,46 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     </section>
 
     <section class="scenario-panel" aria-label="Scenario builder">
-      <div class="panel-head">
-        <h2>Scenario</h2>
-        <span id="pick-total" class="pick-total"></span>
-      </div>
-      <p class="hint">Assign finishes for the remaining rounds — e.g. Russell P1 and Antonelli P2 — and the projected standings update live.</p>
-      <label class="contender-row">
-        Contender
-        <select id="contender"></select>
-        <span id="clinch" class="clinch" aria-live="polite"></span>
-      </label>
-      <div id="rounds" class="rounds"></div>
-      <button type="button" id="reset" class="reset">Reset scenario</button>
       <div class="solver">
-        <h3>What would it take</h3>
-        <p class="hint">Shortest path for the contender above if rivals scored nothing more — a best case, not a projection. For head-to-head finishes, use the scenario above.</p>
+        <div class="panel-head">
+          <h2>What would it take</h2>
+        </div>
+        <p class="hint">Shortest path for your contender if rivals scored nothing more — a best case, not a projection. For head-to-head finishes, use the scenario below.</p>
         <div class="ask-row">
+          <div class="ask-field">
+            <label for="contender">Contender</label>
+            <select id="contender"></select>
+          </div>
           <div class="ask-field">
             <label for="target">Target</label>
             <select id="target"></select>
           </div>
         </div>
-        <p id="answer" class="answer" aria-live="polite"></p>
+        <div id="answer" class="answer" aria-live="polite"></div>
+      </div>
+      <div class="builder">
+        <div class="panel-head">
+          <h2>Scenario</h2>
+          <span id="pick-total" class="pick-total"></span>
+        </div>
+        <p class="hint">Set a finish for every remaining round at once — e.g. Russell P1 everywhere — then repeat for a rival or fine-tune below.</p>
+        <div class="bulk-row">
+          <div class="ask-field">
+            <label for="bulk-driver">Driver</label>
+            <select id="bulk-driver"></select>
+          </div>
+          <div class="ask-field">
+            <label for="bulk-pos">Finish</label>
+            <select id="bulk-pos"></select>
+          </div>
+          <button type="button" id="bulk-apply" class="apply">Set all</button>
+        </div>
+        <p class="hint small">Sprints take the same finish when inside the top 8. The projected standings update live.</p>
+        <details class="tune">
+          <summary>Fine-tune each round (optional)</summary>
+          <div id="rounds" class="rounds"></div>
+        </details>
+        <button type="button" id="reset" class="reset">Reset scenario</button>
       </div>
     </section>
   </main>
@@ -65,7 +83,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
 </div>
 
 <script>
-  import { projectStandings, maxRemainingPoints, clinchState, leastEffortPath } from "../lib/championship.ts";
+  import { projectStandings, leastEffortPath, RACE_POINTS, SPRINT_POINTS } from "../lib/championship.ts";
 
   const root = document.querySelector(".app");
   const data = JSON.parse(root.dataset.snapshot);
@@ -76,9 +94,11 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   const targetEl = document.getElementById("target");
   const answerEl = document.getElementById("answer");
   const roundsEl = document.getElementById("rounds");
-  const clinchEl = document.getElementById("clinch");
   const resetBtn = document.getElementById("reset");
   const pickTotalEl = document.getElementById("pick-total");
+  const bulkDriverEl = document.getElementById("bulk-driver");
+  const bulkPosEl = document.getElementById("bulk-pos");
+  const bulkApplyBtn = document.getElementById("bulk-apply");
   const viewButtons = [...document.querySelectorAll("[data-view]")];
 
   let view = "drivers";
@@ -108,14 +128,17 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     return html;
   }
 
+  function renderPeople(select, list, keep) {
+    select.innerHTML = list
+      .map((e) => `<option value="${e.id}"${e.id === keep ? " selected" : ""}>${e.label}</option>`)
+      .join("");
+    if (![...select.options].some((o) => o.value === keep)) select.selectedIndex = 0;
+  }
+
   function renderContenders(list) {
     // Default to the standings leader (list is stored in rank order); keep the
     // visitor's choice afterwards.
-    const keep = contenderEl.value || list[0]?.id;
-    contenderEl.innerHTML = list
-      .map((e) => `<option value="${e.id}"${e.id === keep ? " selected" : ""}>${e.label}</option>`)
-      .join("");
-    if (![...contenderEl.options].some((o) => o.value === keep)) contenderEl.selectedIndex = 0;
+    renderPeople(contenderEl, list, contenderEl.value || list[0]?.id);
   }
 
   function renderTargets(list) {
@@ -123,6 +146,14 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     targetEl.innerHTML = list
       .map((_, i) => `<option value="${i + 1}"${i + 1 === keep ? " selected" : ""}>P${i + 1}</option>`)
       .join("");
+  }
+
+  function renderBulk(list) {
+    renderPeople(bulkDriverEl, list, bulkDriverEl.value || contenderEl.value || list[0]?.id);
+    const keepPos = Number(bulkPosEl.value) || 1;
+    let html = "";
+    for (let i = 1; i <= list.length; i++) html += `<option value="${i}"${i === keepPos ? " selected" : ""}>P${i}</option>`;
+    bulkPosEl.innerHTML = html;
   }
 
   function setPick(picks, key, id, pos) {
@@ -217,7 +248,6 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     const list = entries();
     const base = list.map(({ id, points, wins }) => ({ id, points, wins }));
     const projected = projectStandings(base, scenario);
-    const maxLeft = maxRemainingPoints(remaining, scenario);
     const leaderPts = projected[0]?.points ?? 0;
 
     standingsTitle.textContent = view === "drivers" ? "Driver standings" : "Constructor standings";
@@ -236,10 +266,25 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
         <span class="pts"><strong>${s.points}</strong><small>${pos === 1 ? "Leader" : `+${leaderPts - s.points}`} · ${s.wins} win${s.wins === 1 ? "" : "s"}</small></span>`;
       standingsEl.append(li);
     }
+  }
 
-    const state = clinchState(projected, contenderEl.value, maxLeft);
-    clinchEl.dataset.state = state;
-    clinchEl.textContent = state === "clinched" ? "has clinched" : state === "eliminated" ? "eliminated" : "still alive";
+  function pathSteps(result) {
+    return result.assignments.flatMap((a) => {
+      const r = remaining.find((x) => x.raceId === a.raceId);
+      const chips = [];
+      if (a.racePosition) chips.push(`<b>P${a.racePosition}</b>`);
+      if (a.sprintPosition) chips.push(`<b class="sprint">Sprint P${a.sprintPosition}</b>`);
+      if (chips.length === 0) return [];
+      return [`<li><span class="step-round">${r.name.replace(/ 2026$/, "")}</span><span class="chips">${chips.join("")}</span></li>`];
+    });
+  }
+
+  function statRow(cells) {
+    return `<div class="stat-row">${cells.map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("")}</div>`;
+  }
+
+  function bar(havePct, needPct, label) {
+    return `<div class="bar" role="img" aria-label="${label}"><i class="have" style="width:${havePct}%"></i>${needPct > 0 ? `<i class="need" style="width:${needPct}%"></i>` : ""}</div>`;
   }
 
   function renderSolver() {
@@ -250,35 +295,55 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     const rounds = remaining.map((r) => ({ raceId: r.raceId, sprint: !!r.sprint }));
     const result = leastEffortPath(base, me.id, target, rounds);
     const final = me.points + result.pointsNeeded;
-
+    const totalAvail = rounds.reduce((sum, r) => sum + RACE_POINTS[0] + (r.sprint ? SPRINT_POINTS[0] : 0), 0);
+    const ceiling = Math.max(me.points + totalAvail, final, 1);
+    const havePct = Math.min(100, (me.points / ceiling) * 100);
+    const needPct = Math.min(100 - havePct, (result.pointsNeeded / ceiling) * 100);
     if (!result.possible) {
       answerEl.dataset.state = "impossible";
-      answerEl.textContent = `${me.label} cannot reach P${target} even winning everything: best reachable is P${result.position} on ${final} pts. Rivals score nothing more in this bound — use the scenario above for head-to-head finishes.`;
+      answerEl.innerHTML = `
+        ${statRow([[`P${result.position}`, "Best reachable"], [final, "Max pts"], [`P${target}`, "Target"]])}
+        ${bar(havePct, needPct, `${me.label} maxes out at ${final} points`)}
+        <p class="bar-cap">${me.label} cannot reach P${target} even winning everything. Use the scenario below for head-to-head finishes.</p>`;
     } else if (result.pointsNeeded === 0) {
       answerEl.dataset.state = "holds";
-      answerEl.textContent = `${me.label} already holds P${target} on ${me.points} pts — nothing more needed.`;
+      answerEl.innerHTML = `
+        ${statRow([[`P${target}`, "Held"], [me.points, "Points"], ["+0", "Needed"]])}
+        ${bar(havePct, 0, `${me.label} already holds P${target}`)}
+        <p class="bar-cap">${me.label} already holds P${target} — nothing more needed.</p>`;
     } else {
+      const steps = pathSteps(result);
       answerEl.dataset.state = "path";
-      answerEl.textContent = `${me.label} needs at least ${result.pointsNeeded} more pts for P${target} (finishes on ${final} pts), if rivals scored nothing more. One cheapest path: ${result.assignments.flatMap((a) => {
-        const r = remaining.find((x) => x.raceId === a.raceId);
-        const prizes = [];
-        if (a.racePosition) prizes.push(`P${a.racePosition}`);
-        if (a.sprintPosition) prizes.push(`Sprint P${a.sprintPosition}`);
-        if (prizes.length === 0) return [];
-        return [`${r.name.replace(/ 2026$/, "")}: ${prizes.join(" + ")}`];
-      }).join("; ")}.`;
+      answerEl.innerHTML = `
+        ${statRow([[`+${result.pointsNeeded}`, "Needed"], [final, "Finishes on"], [`P${target}`, "Target"]])}
+        ${bar(havePct, needPct, `${me.label} needs ${result.pointsNeeded} more points`)}
+        <p class="bar-cap">${result.winsAdded > 0 ? `Includes ${result.winsAdded} win${result.winsAdded === 1 ? "" : "s"}. ` : ""}Best case — rivals score nothing more.</p>
+        <ol class="path">${steps.join("")}</ol>`;
     }
   }
 
   function render() {
-    renderContenders(entries());
-    renderTargets(entries());
+    const list = entries();
+    renderContenders(list);
+    renderTargets(list);
+    renderBulk(list);
     renderStandings();
     renderSolver();
   }
 
   contenderEl.addEventListener("change", render);
   targetEl.addEventListener("change", renderSolver);
+  bulkApplyBtn.addEventListener("click", () => {
+    const id = bulkDriverEl.value;
+    const pos = Number(bulkPosEl.value) || 1;
+    for (const r of remaining) {
+      setPick(scenario[r.raceId], "race", id, pos);
+      if (r.sprint && pos <= 8) setPick(scenario[r.raceId], "sprint", id, pos);
+    }
+    buildRounds(entries());
+    renderStandings();
+    refreshCounts();
+  });
   resetBtn.addEventListener("click", () => {
     resetScenario();
     buildRounds(entries());
@@ -406,6 +471,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   .updated, .pick-total { color: var(--faint); font-size: 0.75rem; white-space: nowrap; }
   .pick-total:not(:empty) { color: var(--f1red-ink); font-weight: 700; }
   .hint { margin: 0 0 0.9rem; color: var(--muted); font-size: 0.85rem; }
+  .hint.small { font-size: 0.75rem; margin: 0.4rem 0 0.7rem; }
 
   /* Standings rows: flat, team-colour edge, tabular points */
   .standings { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.15rem; }
@@ -438,23 +504,70 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   .pts strong { font-size: 1.15rem; font-style: italic; }
   .pts small { display: block; color: var(--faint); font-size: 0.7rem; white-space: nowrap; }
 
-  /* Contender + clinch */
-  .contender-row {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.6rem;
-    align-items: center; margin-bottom: 0.9rem;
-    color: var(--muted); text-transform: uppercase; font-size: 0.72rem;
-    letter-spacing: 0.06em; font-weight: 700;
-  }
-  .clinch { text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
-  .clinch[data-state="clinched"] { color: var(--good); }
-  .clinch[data-state="eliminated"] { color: var(--bad); }
-
   select {
     font: inherit; font-size: 1rem; text-transform: none; letter-spacing: 0;
     background: var(--bg); color: var(--ink);
     border: 1px solid var(--line); border-radius: 8px;
     padding: 0.55rem 0.6rem; min-height: 44px; max-width: 100%;
   }
+
+  /* Solver first: question form + visual answer */
+  .solver { margin: 0; }
+  .ask-row { display: grid; grid-template-columns: minmax(0, 1fr) 7rem; gap: 0.6rem; margin-bottom: 0.9rem; }
+  .ask-field { display: grid; gap: 0.3rem; min-width: 0; }
+  .ask-field label { color: var(--muted); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; font-weight: 700; }
+  .answer {
+    margin: 0; padding: 0.8rem; border-radius: 10px;
+    border: 1px solid var(--line); border-left: 4px solid var(--f1red);
+    background: var(--bg);
+  }
+  .answer[data-state="holds"] { border-left-color: var(--good); }
+  .answer[data-state="impossible"] { border-left-color: var(--bad); }
+  .stat-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; margin-bottom: 0.7rem; }
+  .stat {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.5rem 0.4rem; text-align: center;
+  }
+  .stat b { display: block; font-size: 1.25rem; font-style: italic; font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
+  .bar {
+    display: flex; height: 10px; border-radius: 6px; overflow: hidden;
+    background: rgba(255, 255, 255, 0.08); margin-bottom: 0.4rem;
+  }
+  .bar i { display: block; height: 100%; }
+  .bar .have { background: var(--muted); }
+  .bar .need { background: var(--f1red); }
+  .bar-cap { margin: 0 0 0.7rem; font-size: 0.78rem; color: var(--faint); }
+  .path { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+  .path li {
+    display: flex; justify-content: space-between; align-items: center; gap: 0.6rem;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+    padding: 0.45rem 0.6rem; font-size: 0.85rem;
+  }
+  .step-round { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+  .chips { display: flex; gap: 0.3rem; flex: none; }
+  .chips b { background: var(--f1red); color: #fff; border-radius: 6px; padding: 0.1rem 0.45rem; font-style: italic; font-size: 0.78rem; }
+  .chips b.sprint { background: transparent; border: 1px solid var(--f1red-ink); color: var(--f1red-ink); }
+
+  /* Scenario builder below the solver */
+  .builder { margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+  .bulk-row { display: grid; grid-template-columns: minmax(0, 1fr) 7rem auto; gap: 0.6rem; align-items: end; }
+  .apply {
+    min-height: 44px; padding: 0.55rem 1rem;
+    font: inherit; font-weight: 700; font-style: italic; text-transform: uppercase;
+    letter-spacing: 0.05em; font-size: 0.85rem;
+    background: var(--f1red); color: #fff;
+    border: 0; border-radius: 8px; cursor: pointer; white-space: nowrap;
+  }
+  .apply:active { filter: brightness(1.15); }
+  .tune { border: 1px solid var(--line); border-radius: 10px; margin-bottom: 0.9rem; }
+  .tune summary {
+    cursor: pointer; padding: 0.65rem 0.8rem; min-height: 44px;
+    font-weight: 700; font-size: 0.8rem; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--muted); list-style: none;
+  }
+  .tune summary::-webkit-details-marker { display: none; }
+  .tune #rounds { padding: 0 0.8rem 0.8rem; }
 
   /* Round accordions with per-driver picks */
   .rounds { display: grid; gap: 0.6rem; }
@@ -494,31 +607,12 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   .pick select { min-height: 40px; padding: 0.4rem 0.5rem; font-size: 0.9rem; }
 
   .reset {
-    margin-top: 0.9rem; width: 100%; min-height: 44px;
+    width: 100%; min-height: 44px;
     font: inherit; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.05em;
     background: transparent; color: var(--ink);
     border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
   }
   .reset:active { border-color: var(--f1red); color: var(--f1red-ink); }
-
-  /* Solver bound block */
-  .solver { margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
-  .solver h3 {
-    margin: 0 0 0.5rem; font-style: italic; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.95rem;
-    border-left: 4px solid var(--f1red); padding-left: 0.55rem;
-  }
-  .solver .hint { margin-bottom: 0.7rem; }
-  .ask-row { display: grid; grid-template-columns: 8rem; gap: 0.6rem; margin-bottom: 0.9rem; }
-  .ask-field { display: grid; gap: 0.3rem; min-width: 0; }
-  .ask-field label { color: var(--muted); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; font-weight: 700; }
-  .answer {
-    margin: 0; padding: 0.7rem 0.8rem; border-radius: 8px;
-    font-size: 0.9rem; line-height: 1.5;
-    border: 1px solid var(--line); border-left: 4px solid var(--f1red);
-  }
-  .answer[data-state="holds"] { border-left-color: var(--good); }
-  .answer[data-state="impossible"] { border-left-color: var(--bad); }
 
   footer { max-width: 1200px; margin: 0 auto; padding: 0 clamp(0.9rem, 4vw, 2.5rem) 3rem; }
   footer p { margin: 0; color: var(--faint); font-size: 0.75rem; }
@@ -541,7 +635,9 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   @media (max-width: 480px) {
     .picks { grid-template-columns: minmax(0, 1fr); }
     .pick select { width: 6rem; }
-    .contender-row { grid-template-columns: minmax(0, 1fr); }
+    .ask-row { grid-template-columns: minmax(0, 1fr); }
+    .bulk-row { grid-template-columns: minmax(0, 1fr); }
+    .apply { width: 100%; }
     .round summary { grid-template-columns: minmax(0, 1fr) auto 1.2rem; align-items: start; padding-top: 0.8rem; padding-bottom: 0.8rem; }
     .round-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
     .round-meta { display: none; }
