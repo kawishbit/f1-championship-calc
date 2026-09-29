@@ -34,21 +34,28 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
 
     <section class="scenario-panel" aria-label="Scenario builder">
       <div class="panel-head">
-        <h2>What would it take</h2>
+        <h2>Scenario</h2>
+        <span id="pick-total" class="pick-total"></span>
       </div>
-      <p class="hint">Pick a contender and a target final position. The page shows the least-effort path: the cheapest finishes that reach it if every rival scores nothing more.</p>
-      <div class="ask-row">
-        <div class="ask-field">
-          <label for="contender">Contender</label>
-          <select id="contender"></select>
-        </div>
-        <div class="ask-field">
-          <label for="target">Target</label>
-          <select id="target"></select>
-        </div>
-      </div>
-      <p id="answer" class="answer" aria-live="polite"></p>
+      <p class="hint">Assign finishes for the remaining rounds — e.g. Russell P1 and Antonelli P2 — and the projected standings update live.</p>
+      <label class="contender-row">
+        Contender
+        <select id="contender"></select>
+        <span id="clinch" class="clinch" aria-live="polite"></span>
+      </label>
       <div id="rounds" class="rounds"></div>
+      <button type="button" id="reset" class="reset">Reset scenario</button>
+      <div class="solver">
+        <h3>What would it take</h3>
+        <p class="hint">Shortest path for the contender above if rivals scored nothing more — a best case, not a projection. For head-to-head finishes, use the scenario above.</p>
+        <div class="ask-row">
+          <div class="ask-field">
+            <label for="target">Target</label>
+            <select id="target"></select>
+          </div>
+        </div>
+        <p id="answer" class="answer" aria-live="polite"></p>
+      </div>
     </section>
   </main>
 
@@ -58,7 +65,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
 </div>
 
 <script>
-  import { leastEffortPath } from "../lib/championship.ts";
+  import { projectStandings, maxRemainingPoints, clinchState, leastEffortPath } from "../lib/championship.ts";
 
   const root = document.querySelector(".app");
   const data = JSON.parse(root.dataset.snapshot);
@@ -69,11 +76,18 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   const targetEl = document.getElementById("target");
   const answerEl = document.getElementById("answer");
   const roundsEl = document.getElementById("rounds");
+  const clinchEl = document.getElementById("clinch");
+  const resetBtn = document.getElementById("reset");
+  const pickTotalEl = document.getElementById("pick-total");
   const viewButtons = [...document.querySelectorAll("[data-view]")];
 
   let view = "drivers";
-  const overrides = new Set();
-  const remaining = data.rounds.filter((r) => !r.played || overrides.has(r.raceId));
+  const scenario = {};
+  const remaining = data.rounds.filter((r) => !r.played);
+  const resetScenario = () => {
+    for (const r of remaining) scenario[r.raceId] = { race: [], sprint: [] };
+  };
+  resetScenario();
 
   const entries = () =>
     view === "drivers"
@@ -87,6 +101,12 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
           colour: t.colour, photo: null, code: null,
           points: t.points, wins: t.wins,
         }));
+
+  function resultOptions(count, selected) {
+    let html = `<option value="">—</option>`;
+    for (let i = 1; i <= count; i++) html += `<option value="${i}"${selected === i ? " selected" : ""}>P${i}</option>`;
+    return html;
+  }
 
   function renderContenders(list) {
     // Default to the standings leader (list is stored in rank order); keep the
@@ -105,90 +125,176 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
       .join("");
   }
 
-  function roundResult(assignment, round) {
-    const prizes = [];
-    if (assignment.racePosition) prizes.push(`P${assignment.racePosition}`);
-    if (assignment.sprintPosition) prizes.push(`Sprint P${assignment.sprintPosition}`);
-    if (prizes.length === 0) return null;
-    return { title: round.name.replace(/ 2026$/, ""), prizes: prizes.join(" + ") };
+  function setPick(picks, key, id, pos) {
+    const slots = picks[key];
+    for (let i = 0; i < slots.length; i++) if (slots[i] === id) slots[i] = null;
+    if (pos > 0) {
+      while (slots.length < pos) slots.push(null);
+      slots[pos - 1] = id;
+    }
   }
 
-  function render() {
-    const list = entries();
-    renderContenders(list);
-    renderTargets(list);
-    const target = Number(targetEl.value) || 1;
-
-    const base = list.map(({ id, points, wins }) => ({ id, points, wins }));
-    const rounds = remaining.map((r) => ({ raceId: r.raceId, sprint: !!r.sprint }));
-    const result = leastEffortPath(base, contenderEl.value, target, rounds);
-    const me = list.find((x) => x.id === contenderEl.value);
-    const final = me.points + result.pointsNeeded;
-
-    standingsTitle.textContent = view === "drivers" ? "Driver standings" : "Constructor standings";
-    standingsEl.innerHTML = "";
-    const ordered = [...list].sort((a, b) => b.points - a.points || b.wins - a.wins);
-    const leaderPts = Math.max(final, ordered[0].points);
-    for (const e of ordered) {
-      const pos = ordered.indexOf(e) + 1;
-      const isMe = e.id === me.id;
-      const pts = isMe ? final : e.points;
-      const wins = isMe ? e.wins + result.winsAdded : e.wins;
-      const li = document.createElement("li");
-      li.className = "row";
-      if (isMe) li.dataset.contender = "true";
-      li.innerHTML = `
-        <span class="pos" style="--c:${e.colour ?? "#666"}">${isMe ? `P${result.position}` : pos}</span>
-        ${e.photo ? `<img class="photo" src="${e.photo}" alt="" loading="lazy" />` : `<span class="photo fallback" style="--c:${e.colour ?? "#666"}" aria-hidden="true">${(e.code ?? e.label).slice(0, 3)}</span>`}
-        <span class="who"><strong>${e.label}</strong>${e.sub ? `<small>${e.sub}</small>` : ""}</span>
-        <span class="pts"><strong>${pts}</strong><small>${isMe ? `goes P${result.position}` : pos === 1 ? "Leader" : `+${leaderPts - pts}`} · ${wins} win${wins === 1 ? "" : "s"}</small></span>`;
-      standingsEl.append(li);
+  function syncRound(details, picks, key) {
+    for (const sel of details.querySelectorAll(`select[data-key="${key}"]`)) {
+      sel.value = String(picks[key].indexOf(sel.dataset.id) + 1 || "");
     }
+  }
 
-    if (!result.possible) {
-      answerEl.dataset.state = "impossible";
-      answerEl.textContent = `${me.label} cannot reach P${target}: even winning everything lands P${result.position} on ${final} pts. Best reachable shown.`;
-    } else if (result.pointsNeeded === 0) {
-      answerEl.dataset.state = "holds";
-      answerEl.textContent = `${me.label} already holds P${target} on ${me.points} pts — nothing more needed.`;
-    } else {
-      answerEl.dataset.state = "path";
-      answerEl.textContent = `${me.label} needs ${result.pointsNeeded} more pts for P${target} (finishes on ${final} pts): ${result.assignments.flatMap((a) => {
-        const r = remaining.find((x) => x.raceId === a.raceId);
-        const hit = roundResult(a, r);
-        return hit ? [`${hit.title}: ${hit.prizes}`] : [];
-      }).join("; ")}. Rivals held on current points.`;
-    }
+  function bindSelect(sel, picks, key, details) {
+    sel.addEventListener("change", () => {
+      setPick(picks, key, sel.dataset.id, Number(sel.value));
+      syncRound(details, picks, key);
+      renderStandings();
+      refreshCounts();
+    });
+  }
 
+  function buildRounds(list) {
     roundsEl.innerHTML = "";
-    const byRound = new Map(result.assignments.map((a) => [a.raceId, a]));
     remaining.forEach((r, i) => {
-      const a = byRound.get(r.raceId);
-      const hit = a ? roundResult(a, r) : null;
+      const picks = scenario[r.raceId];
       const details = document.createElement("details");
       details.className = "round";
+      details.dataset.race = r.raceId;
       if (i === 0) details.open = true;
       details.innerHTML = `
         <summary>
           <span class="round-title">${r.name}</span>
           <span class="round-meta">R${r.round}${r.sprint ? " · Sprint" : ""}</span>
-          <span class="count" data-empty="${!hit}">${hit ? hit.prizes : "No points needed"}</span>
+          <span class="count" data-empty="true">No picks</span>
         </summary>
-        <p class="path-line">${hit ? `${me.label} finishes <strong>${hit.prizes}</strong> (${r.name}).` : `No points needed from ${me.label} here — rivals are assumed to score nothing more.`}</p>`;
+        <div class="picks"></div>`;
+      const picksEl = details.querySelector(".picks");
+      for (const e of list) {
+        const row = document.createElement("label");
+        row.className = "pick";
+        row.innerHTML = `<span class="pick-name"><i style="--c:${e.colour ?? "#666"}"></i>${e.label}</span>`;
+        const sel = document.createElement("select");
+        sel.dataset.id = e.id;
+        sel.dataset.key = "race";
+        sel.innerHTML = resultOptions(list.length, picks.race.indexOf(e.id) + 1 || "");
+        sel.setAttribute("aria-label", `${e.label} finishing position, ${r.name}`);
+        bindSelect(sel, picks, "race", details);
+        row.append(sel);
+        picksEl.append(row);
+        if (r.sprint) {
+          const srow = document.createElement("label");
+          srow.className = "pick sprint";
+          srow.innerHTML = `<span class="pick-name"><em>Sprint</em>${e.label}</span>`;
+          const ssel = document.createElement("select");
+          ssel.dataset.id = e.id;
+          ssel.dataset.key = "sprint";
+          ssel.innerHTML = resultOptions(8, picks.sprint.indexOf(e.id) + 1 || "");
+          ssel.setAttribute("aria-label", `${e.label} sprint position, ${r.name}`);
+          bindSelect(ssel, picks, "sprint", details);
+          srow.append(ssel);
+          picksEl.append(srow);
+        }
+      }
       roundsEl.append(details);
     });
+    refreshCounts();
+  }
+
+  function pickCount(picks) {
+    return picks.race.filter(Boolean).length + picks.sprint.filter(Boolean).length;
+  }
+
+  function refreshCounts() {
+    let total = 0;
+    for (const details of roundsEl.querySelectorAll("details.round")) {
+      const picks = scenario[details.dataset.race];
+      const n = pickCount(picks);
+      total += n;
+      const badge = details.querySelector(".count");
+      badge.textContent = n === 0 ? "No picks" : `${n} pick${n === 1 ? "" : "s"}`;
+      badge.dataset.empty = String(n === 0);
+    }
+    pickTotalEl.textContent = total === 0 ? "" : `${total} pick${total === 1 ? "" : "s"}`;
+  }
+
+  function renderStandings() {
+    const list = entries();
+    const base = list.map(({ id, points, wins }) => ({ id, points, wins }));
+    const projected = projectStandings(base, scenario);
+    const maxLeft = maxRemainingPoints(remaining, scenario);
+    const leaderPts = projected[0]?.points ?? 0;
+
+    standingsTitle.textContent = view === "drivers" ? "Driver standings" : "Constructor standings";
+    standingsEl.innerHTML = "";
+    for (const s of projected) {
+      const e = list.find((x) => x.id === s.id);
+      const pos = projected.indexOf(s) + 1;
+      const isMe = e.id === contenderEl.value;
+      const li = document.createElement("li");
+      li.className = "row";
+      if (isMe) li.dataset.contender = "true";
+      li.innerHTML = `
+        <span class="pos" style="--c:${e.colour ?? "#666"}">${pos}</span>
+        ${e.photo ? `<img class="photo" src="${e.photo}" alt="" loading="lazy" />` : `<span class="photo fallback" style="--c:${e.colour ?? "#666"}" aria-hidden="true">${(e.code ?? e.label).slice(0, 3)}</span>`}
+        <span class="who"><strong>${e.label}</strong>${e.sub ? `<small>${e.sub}</small>` : ""}</span>
+        <span class="pts"><strong>${s.points}</strong><small>${pos === 1 ? "Leader" : `+${leaderPts - s.points}`} · ${s.wins} win${s.wins === 1 ? "" : "s"}</small></span>`;
+      standingsEl.append(li);
+    }
+
+    const state = clinchState(projected, contenderEl.value, maxLeft);
+    clinchEl.dataset.state = state;
+    clinchEl.textContent = state === "clinched" ? "has clinched" : state === "eliminated" ? "eliminated" : "still alive";
+  }
+
+  function renderSolver() {
+    const list = entries();
+    const me = list.find((x) => x.id === contenderEl.value) ?? list[0];
+    const target = Number(targetEl.value) || 1;
+    const base = list.map(({ id, points, wins }) => ({ id, points, wins }));
+    const rounds = remaining.map((r) => ({ raceId: r.raceId, sprint: !!r.sprint }));
+    const result = leastEffortPath(base, me.id, target, rounds);
+    const final = me.points + result.pointsNeeded;
+
+    if (!result.possible) {
+      answerEl.dataset.state = "impossible";
+      answerEl.textContent = `${me.label} cannot reach P${target} even winning everything: best reachable is P${result.position} on ${final} pts. Rivals score nothing more in this bound — use the scenario above for head-to-head finishes.`;
+    } else if (result.pointsNeeded === 0) {
+      answerEl.dataset.state = "holds";
+      answerEl.textContent = `${me.label} already holds P${target} on ${me.points} pts — nothing more needed.`;
+    } else {
+      answerEl.dataset.state = "path";
+      answerEl.textContent = `${me.label} needs at least ${result.pointsNeeded} more pts for P${target} (finishes on ${final} pts), if rivals scored nothing more. One cheapest path: ${result.assignments.flatMap((a) => {
+        const r = remaining.find((x) => x.raceId === a.raceId);
+        const prizes = [];
+        if (a.racePosition) prizes.push(`P${a.racePosition}`);
+        if (a.sprintPosition) prizes.push(`Sprint P${a.sprintPosition}`);
+        if (prizes.length === 0) return [];
+        return [`${r.name.replace(/ 2026$/, "")}: ${prizes.join(" + ")}`];
+      }).join("; ")}.`;
+    }
+  }
+
+  function render() {
+    renderContenders(entries());
+    renderTargets(entries());
+    renderStandings();
+    renderSolver();
   }
 
   contenderEl.addEventListener("change", render);
-  targetEl.addEventListener("change", render);
+  targetEl.addEventListener("change", renderSolver);
+  resetBtn.addEventListener("click", () => {
+    resetScenario();
+    buildRounds(entries());
+    render();
+  });
   for (const b of viewButtons) {
     b.addEventListener("click", () => {
       view = b.dataset.view;
       for (const x of viewButtons) x.setAttribute("aria-selected", String(x === b));
+      resetScenario();
+      buildRounds(entries());
       render();
     });
   }
 
+  buildRounds(entries());
   render();
 </script>
 
@@ -297,7 +403,8 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     text-transform: uppercase; letter-spacing: 0.03em; font-size: 1rem;
     border-left: 4px solid var(--f1red); padding-left: 0.55rem;
   }
-  .updated { color: var(--faint); font-size: 0.75rem; white-space: nowrap; }
+  .updated, .pick-total { color: var(--faint); font-size: 0.75rem; white-space: nowrap; }
+  .pick-total:not(:empty) { color: var(--f1red-ink); font-weight: 700; }
   .hint { margin: 0 0 0.9rem; color: var(--muted); font-size: 0.85rem; }
 
   /* Standings rows: flat, team-colour edge, tabular points */
@@ -331,26 +438,25 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   .pts strong { font-size: 1.15rem; font-style: italic; }
   .pts small { display: block; color: var(--faint); font-size: 0.7rem; white-space: nowrap; }
 
-  /* Question form + answer */
-  .ask-row { display: grid; grid-template-columns: 1fr auto; gap: 0.6rem; margin-bottom: 0.9rem; }
-  .ask-field { display: grid; gap: 0.3rem; min-width: 0; }
-  .ask-field label { color: var(--muted); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; font-weight: 700; }
-  #target { min-width: 6rem; }
+  /* Contender + clinch */
+  .contender-row {
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0.6rem;
+    align-items: center; margin-bottom: 0.9rem;
+    color: var(--muted); text-transform: uppercase; font-size: 0.72rem;
+    letter-spacing: 0.06em; font-weight: 700;
+  }
+  .clinch { text-transform: none; letter-spacing: 0; font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+  .clinch[data-state="clinched"] { color: var(--good); }
+  .clinch[data-state="eliminated"] { color: var(--bad); }
+
   select {
-    font: inherit; font-size: 1rem;
+    font: inherit; font-size: 1rem; text-transform: none; letter-spacing: 0;
     background: var(--bg); color: var(--ink);
     border: 1px solid var(--line); border-radius: 8px;
     padding: 0.55rem 0.6rem; min-height: 44px; max-width: 100%;
   }
-  .answer {
-    margin: 0 0 1rem; padding: 0.7rem 0.8rem; border-radius: 8px;
-    font-size: 0.9rem; line-height: 1.5;
-    border: 1px solid var(--line); border-left: 4px solid var(--f1red);
-  }
-  .answer[data-state="holds"] { border-left-color: var(--good); }
-  .answer[data-state="impossible"] { border-left-color: var(--bad); }
 
-  /* Round accordions */
+  /* Round accordions with per-driver picks */
   .rounds { display: grid; gap: 0.6rem; }
   .round { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: transparent; }
   .round[open] { border-color: rgba(255, 255, 255, 0.18); }
@@ -373,8 +479,46 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     color: var(--faint); white-space: nowrap;
   }
   .count[data-empty="false"] { color: var(--f1red-ink); }
-  .path-line { margin: 0; padding: 0.2rem 0.8rem 0.8rem; font-size: 0.88rem; color: var(--muted); }
-  .path-line strong { color: var(--ink); }
+  .picks {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem 0.8rem;
+    padding: 0.2rem 0.8rem 0.8rem;
+  }
+  .pick {
+    display: grid; grid-template-columns: minmax(0, 1fr) 5.2rem; gap: 0.5rem;
+    align-items: center; min-width: 0;
+    font-size: 0.82rem; font-weight: 400; text-transform: none; letter-spacing: 0;
+  }
+  .pick-name { display: flex; align-items: center; gap: 0.45rem; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-weight: 400; }
+  .pick-name i { width: 3px; height: 1.1em; border-radius: 2px; background: var(--c, transparent); flex: none; }
+  .pick-name em { font-style: normal; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--faint); }
+  .pick select { min-height: 40px; padding: 0.4rem 0.5rem; font-size: 0.9rem; }
+
+  .reset {
+    margin-top: 0.9rem; width: 100%; min-height: 44px;
+    font: inherit; font-weight: 700; font-style: italic; text-transform: uppercase; letter-spacing: 0.05em;
+    background: transparent; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+  }
+  .reset:active { border-color: var(--f1red); color: var(--f1red-ink); }
+
+  /* Solver bound block */
+  .solver { margin-top: 1.1rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+  .solver h3 {
+    margin: 0 0 0.5rem; font-style: italic; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em; font-size: 0.95rem;
+    border-left: 4px solid var(--f1red); padding-left: 0.55rem;
+  }
+  .solver .hint { margin-bottom: 0.7rem; }
+  .ask-row { display: grid; grid-template-columns: 8rem; gap: 0.6rem; margin-bottom: 0.9rem; }
+  .ask-field { display: grid; gap: 0.3rem; min-width: 0; }
+  .ask-field label { color: var(--muted); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; font-weight: 700; }
+  .answer {
+    margin: 0; padding: 0.7rem 0.8rem; border-radius: 8px;
+    font-size: 0.9rem; line-height: 1.5;
+    border: 1px solid var(--line); border-left: 4px solid var(--f1red);
+  }
+  .answer[data-state="holds"] { border-left-color: var(--good); }
+  .answer[data-state="impossible"] { border-left-color: var(--bad); }
 
   footer { max-width: 1200px; margin: 0 auto; padding: 0 clamp(0.9rem, 4vw, 2.5rem) 3rem; }
   footer p { margin: 0; color: var(--faint); font-size: 0.75rem; }
@@ -384,9 +528,10 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     .standings-panel { position: sticky; top: 76px; max-height: calc(100vh - 100px); overflow: auto; }
     .photo { width: 48px; height: 48px; }
     .row { grid-template-columns: 2rem 48px minmax(0, 1fr) auto; }
+    .reset:hover { border-color: var(--f1red); color: var(--f1red-ink); }
   }
 
-  /* iPhone: full-width toggle, tighter panels */
+  /* iPhone: full-width toggle, single-column picks, tighter panels */
   @media (max-width: 900px) {
     main { grid-template-columns: minmax(0, 1fr); }
     .view-toggle { order: 3; flex: 1 1 100%; }
@@ -394,7 +539,9 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     .standings-panel, .scenario-panel { padding: 0.85rem; }
   }
   @media (max-width: 480px) {
-    .ask-row { grid-template-columns: minmax(0, 1fr); }
+    .picks { grid-template-columns: minmax(0, 1fr); }
+    .pick select { width: 6rem; }
+    .contender-row { grid-template-columns: minmax(0, 1fr); }
     .round summary { grid-template-columns: minmax(0, 1fr) auto 1.2rem; align-items: start; padding-top: 0.8rem; padding-bottom: 0.8rem; }
     .round-title { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
     .round-meta { display: none; }

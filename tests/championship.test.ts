@@ -44,6 +44,21 @@ describe("projectStandings", () => {
     assert.equal(out[0].points, 25);
     assert.equal(out[0].wins, 1);
   });
+
+  it("scores sparse position slots, skipping empty ones", () => {
+    const out = projectStandings(
+      [
+        { id: "a", points: 100, wins: 2 },
+        { id: "b", points: 90, wins: 1 },
+      ],
+      { r1: { race: ["b", null, null], sprint: [null, "a"] } satisfies RoundPicks },
+    );
+    // b wins the race (+25, +1 win); a takes sprint P2 (+7)
+    assert.deepEqual(out, [
+      { id: "b", points: 115, wins: 2 },
+      { id: "a", points: 107, wins: 2 },
+    ]);
+  });
 });
 
 describe("maxRemainingPoints", () => {
@@ -57,6 +72,11 @@ describe("maxRemainingPoints", () => {
       maxRemainingPoints(rounds, { r1: { race: ["a"], sprint: [] } }),
       33 + 33,
     );
+  });
+
+  it("keeps the sprint alive when only the race has picks", () => {
+    const rounds = [{ raceId: "r1", sprint: true }];
+    assert.equal(maxRemainingPoints(rounds, { r1: { race: ["a"], sprint: [] } }), 8);
   });
 });
 

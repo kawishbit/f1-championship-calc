@@ -13,10 +13,10 @@ export interface RoundInfo {
   sprint: boolean;
 }
 
-/** Finishing order per round: driver/team ids in P1..Pn order (only scored positions matter). */
+/** Position slots per round: index P1..Pn holds a driver/team id, null when empty. */
 export interface RoundPicks {
-  race: string[];
-  sprint: string[];
+  race: Array<string | null>;
+  sprint: Array<string | null>;
 }
 
 export function projectStandings(
@@ -28,12 +28,14 @@ export function projectStandings(
   );
   for (const picks of Object.values(scenario)) {
     picks.race.forEach((id, i) => {
+      if (!id) return;
       const row = table[id];
       if (!row) return;
       row.points += RACE_POINTS[i] ?? 0;
       if (i === 0) row.wins += 1;
     });
     picks.sprint.forEach((id, i) => {
+      if (!id) return;
       const row = table[id];
       if (!row) return;
       row.points += SPRINT_POINTS[i] ?? 0;
@@ -42,14 +44,14 @@ export function projectStandings(
   return Object.values(table).sort((a, b) => b.points - a.points || b.wins - a.wins);
 }
 
-/** Max points still available across rounds with no picks assigned yet. */
+/** Max points still available: 25 per undecided race + 8 per undecided sprint. */
 export function maxRemainingPoints(rounds: RoundInfo[], scenario: Record<string, RoundPicks>): number {
-  return rounds
-    .filter((r) => {
-      const picks = scenario[r.raceId];
-      return !picks || (picks.race.length === 0 && picks.sprint.length === 0);
-    })
-    .reduce((sum, r) => sum + 25 + (r.sprint ? 8 : 0), 0);
+  return rounds.reduce((sum, r) => {
+    const picks = scenario[r.raceId];
+    const raceOpen = !picks || picks.race.every((v) => !v);
+    const sprintOpen = !picks || picks.sprint.every((v) => !v);
+    return sum + (raceOpen ? 25 : 0) + (r.sprint && sprintOpen ? 8 : 0);
+  }, 0);
 }
 export interface EffortAssignment {
   raceId: string;
