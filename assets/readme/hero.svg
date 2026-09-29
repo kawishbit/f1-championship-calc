@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="360" viewBox="0 0 1200 360"
+     role="img" aria-labelledby="title desc">
+  <title id="title">f1-championship-calc — what would it take to win the title</title>
+  <desc id="desc">Championship Calculator hero: title and an illustrative standings panel with a shortest-path solver strip.</desc>
+
+  <defs>
+    <clipPath id="heroClip">
+      <rect width="1200" height="360" rx="24"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#heroClip)">
+    <rect width="1200" height="360" fill="#0A0A0F"/>
+    <rect x="0" y="0" width="1200" height="6" fill="#E10600"/>
+    <path d="M-40 332 C 240 288, 420 378, 700 332 S 1080 278, 1280 330 L1280 400 L-40 400 Z" fill="#121218"/>
+    <path d="M-40 332 C 240 288, 420 378, 700 332 S 1080 278, 1280 330" fill="none" stroke="#E10600" stroke-opacity="0.35" stroke-width="3"/>
+    <g opacity="0.5">
+      <rect x="1072" y="28" width="18" height="18" fill="#F5F3F7"/>
+      <rect x="1108" y="28" width="18" height="18" fill="#F5F3F7"/>
+      <rect x="1090" y="46" width="18" height="18" fill="#F5F3F7"/>
+    </g>
+
+    <!-- LEFT: title -->
+    <g id="title-block" transform="translate(64 72)">
+      <g transform="translate(0 0)">
+        <rect x="0" y="0" width="8" height="26" fill="#E10600" transform="skewX(-22)"/>
+        <rect x="13" y="0" width="8" height="26" fill="#E10600" opacity="0.65" transform="skewX(-22)"/>
+        <rect x="26" y="0" width="8" height="26" fill="#E10600" opacity="0.35" transform="skewX(-22)"/>
+      </g>
+      <text x="52" y="14" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" letter-spacing="3" fill="#A7A3B5">FIA FORMULA ONE &#183; FAN CALCULATOR</text>
+      <text x="0" y="82" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="52" font-weight="800" font-style="italic" letter-spacing="1" fill="#F5F3F7">CHAMPIONSHIP</text>
+      <text x="0" y="140" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="52" font-weight="800" font-style="italic" letter-spacing="1" fill="#F5F3F7">CALC<tspan fill="#E10600">.</tspan></text>
+      <text x="2" y="178" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="19" fill="#D8D5E0">What would it take for your driver to win it all?</text>
+    </g>
+
+    <!-- RIGHT: illustrative standings -->
+    <g id="project-proof" transform="translate(736 56)">
+      <rect x="0" y="0" width="400" height="226" rx="14" fill="#121218" stroke="#2A2A34" stroke-width="2"/>
+      <text x="24" y="34" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="15" letter-spacing="2" fill="#A7A3B5">STANDINGS &#183; ILLUSTRATIVE</text>
+
+      <g font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif">
+        <rect x="0" y="48" width="5" height="40" fill="#4781D7"/>
+        <text x="22" y="75" font-size="20" font-weight="800" font-style="italic" fill="#A7A3B5">1</text>
+        <text x="50" y="75" font-size="20" font-weight="800" font-style="italic" fill="#F5F3F7">VER</text>
+        <rect x="130" y="60" width="140" height="11" rx="5.5" fill="#2A2A34"/>
+        <rect x="130" y="60" width="140" height="11" rx="5.5" fill="#4781D7"/>
+        <text x="284" y="77" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="19" font-weight="700" fill="#F5F3F7">312</text>
+
+        <rect x="0" y="94" width="5" height="40" fill="#ED1131"/>
+        <text x="22" y="121" font-size="20" font-weight="800" font-style="italic" fill="#A7A3B5">2</text>
+        <text x="50" y="121" font-size="20" font-weight="800" font-style="italic" fill="#F5F3F7">HAM</text>
+        <rect x="130" y="106" width="140" height="11" rx="5.5" fill="#2A2A34"/>
+        <rect x="130" y="106" width="118" height="11" rx="5.5" fill="#ED1131"/>
+        <text x="284" y="123" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="19" font-weight="700" fill="#F5F3F7">264</text>
+
+        <rect x="0" y="140" width="5" height="40" fill="#00D7B6"/>
+        <text x="22" y="167" font-size="20" font-weight="800" font-style="italic" fill="#A7A3B5">3</text>
+        <text x="50" y="167" font-size="20" font-weight="800" font-style="italic" fill="#F5F3F7">ANT</text>
+        <rect x="130" y="152" width="140" height="11" rx="5.5" fill="#2A2A34"/>
+        <rect x="130" y="152" width="104" height="11" rx="5.5" fill="#00D7B6"/>
+        <text x="284" y="169" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="19" font-weight="700" fill="#F5F3F7">232</text>
+      </g>
+
+      <rect x="0" y="188" width="400" height="38" fill="#E10600" opacity="0.14"/>
+      <rect x="0" y="188" width="5" height="38" fill="#00D26A"/>
+      <text x="22" y="213" font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="16" font-weight="700" fill="#F5F3F7">PICK A DRIVER &#8594; SHORTEST PATH TO P1</text>
+    </g>
+  </g>
+</svg>
