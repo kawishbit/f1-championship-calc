@@ -517,7 +517,7 @@
       "name": "Singapore Airlanes Singapore Grand Prix 2026",
       "round": 17,
       "date": "2026-10-11",
-      "sprint": false,
+      "sprint": true,
       "played": false
     },
     {

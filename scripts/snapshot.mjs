@@ -93,12 +93,17 @@ const outTeams = teamsChamp.constructors_championship.map((row) => ({
   position: row.position,
 }));
 
+// f1api.dev schedule data lags for future sprints: Singapore 2026 is officially
+// a sprint (FIA/BBC, 16 Sep 2025: China, Miami, Canada, Britain, Netherlands,
+// Singapore) but ships with sprintRace.date: null. Authoritative overrides win.
+const SPRINT_OVERRIDES = { singapore_2026: true };
+
 const rounds = current.races.map((r) => ({
   raceId: r.raceId,
   name: (r.raceName ?? r.raceId).replace(/^Formula 1\s+/, ""),
   round: r.round,
   date: r.schedule?.race?.date ?? null,
-  sprint: Boolean(r.schedule?.sprintRace?.date),
+  sprint: SPRINT_OVERRIDES[r.raceId] ?? Boolean(r.schedule?.sprintRace?.date),
   played: Boolean(r.winner),
 }));
 

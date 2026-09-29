@@ -1,11 +1,11 @@
 # 03: Scenario playground
 
-**What to build:** "What would it take" comes first with a visual answer (stat cards, points bar, per-round path with finish chips); the scenario builder sits below with bulk-fill (driver + finish applied to every remaining round, including sprints when inside the top 8) plus optional per-round fine-tune accordions. The projected standings update live via `projectStandings`.
+**What to build:** "Points still available" (Grand Prix pts + Sprint pts boxes with the sprint venue note) sits above "What would it take" (needed / finishes-on / target stats + bar, no per-round path list); the scenario builder sits below with bulk-fill plus optional fine-tune. Picks project live into the standings list on the left, with moved rows outlined and a note pointing at them.
 
 **Blocked by:** 01 (Snapshot pipeline + static standings table), 02 (Points engine + remaining rounds).
 
 **Status:** done
 
-- [x] Solver-first layout with stat cards (needed / finishes-on / target), have-vs-needed bar, and per-round path steps with P-chips (holds and impossible states visualized too)
-- [x] Bulk-fill sets one finish across all remaining rounds; running it per driver composes head-to-head answers (Russell P1 everywhere then Antonelli P2 everywhere); fine-tune accordions stay optional and editable afterwards
+- [x] Points-available section above solver (200 Grand Prix pts, 8 Sprint pts with Singapore sprint note); sprint flag fixed via override after API check
+- [x] Solver shows needed / finishes-on / target + bar only; scenario bulk-fill + fine-tune project into the left standings with moved-row outlines and pointing notes
 - [x] Works for both drivers and constructors views
