@@ -1,4 +1,4 @@
- // Build-time data snapshot: f1api.dev (standings + schedule) + OpenF1 (headshots + team colours) + Jolpica (sprint flags).
+ // Build-time data snapshot: f1api.dev (standings + schedule) + OpenF1 (headshots + team colours) + Jolpica (sprint flags) + hardcoded points system (no API publishes it).
  // Output: src/data/snapshot.json (checked in, offline fallback) + public/drivers/*.png.
  // Usage: pnpm run snapshot
 import { mkdir, writeFile } from "node:fs/promises";
@@ -118,10 +118,20 @@ const outTeams = teamsChamp.constructors_championship.map((row) => ({
    played: Boolean(r.winner),
  }));
 
+ // No API publishes the points system (checked f1api.dev, Jolpica, OpenF1):
+ // it lives here as data so a 2027-style change (e.g. fastest-lap point back)
+ // flows to avail boxes + solver without touching UI or engine code.
+ const points = {
+   race: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1],
+   sprint: [8, 7, 6, 5, 4, 3, 2, 1],
+   fastestLap: 0, // per Grand Prix, sprints excluded; 1 extra pt/round if reintroduced
+ };
+
  const snapshot = {
    season,
    generatedAt: new Date().toISOString(),
    sources: ["https://f1api.dev", "https://api.openf1.org", "https://api.jolpi.ca/ergast"],
+   points,
    drivers: outDrivers,
    teams: outTeams,
    rounds,

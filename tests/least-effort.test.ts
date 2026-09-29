@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { leastEffortPath } from "../src/lib/championship.ts";
+ import { leastEffortPath, DEFAULT_POINTS } from "../src/lib/championship.ts";
 
 describe("leastEffortPath", () => {
   it("finds cheapest single-race result to take P1", () => {
@@ -80,6 +80,23 @@ describe("leastEffortPath", () => {
     assert.equal(out.pointsNeeded, 21);
     assert.equal(out.position, 1);
   });
+   it("teams view banks both cars: P1+P2 pair covers a 43-point gap in one round", () => {
+     const out = leastEffortPath(
+       [
+         { id: "a", points: 100, wins: 5 },
+         { id: "b", points: 58, wins: 0 },
+       ],
+       "b",
+       1,
+       [{ raceId: "r1", sprint: false }],
+       DEFAULT_POINTS,
+       2,
+     );
+     assert.equal(out.possible, true);
+     // Gap 43 (100 - 58 + 1): one car maxes at 25, the pair banks 25+18 = 43.
+     assert.equal(out.pointsNeeded, 43);
+     assert.equal(out.position, 1);
+   });
 
   it("wins on victories on an exact tie, without inventing rival results", () => {
     const out = leastEffortPath(

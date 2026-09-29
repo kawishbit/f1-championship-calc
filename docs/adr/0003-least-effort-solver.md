@@ -14,3 +14,8 @@
  prize set reaching each points bar, with exact ties winnable only on
  strictly more wins (FIA order). Impossible targets return `possible: false`
  with the best reachable position at full spend.
+ - Teams view (`cars = 2`): each event pays both cars combined, so every
+ prize is a single finish plus every distinct pair (P1+P2 = 43 race,
+ 8+7 = 15 sprint). Wins count when either car wins. Points and solver read
+ the system from `snapshot.json` (`scripts/snapshot.mjs` hardcodes it — no
+ API publishes it); fastest lap is a free best-case bonus, 0 today.

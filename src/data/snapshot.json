@@ -1,11 +1,36 @@
 {
   "season": 2026,
-  "generatedAt": "2026-09-29T14:35:03.908Z",
+  "generatedAt": "2026-09-29T15:51:33.723Z",
   "sources": [
     "https://f1api.dev",
     "https://api.openf1.org",
     "https://api.jolpi.ca/ergast"
   ],
+  "points": {
+    "race": [
+      25,
+      18,
+      15,
+      12,
+      10,
+      8,
+      6,
+      4,
+      2,
+      1
+    ],
+    "sprint": [
+      8,
+      7,
+      6,
+      5,
+      4,
+      3,
+      2,
+      1
+    ],
+    "fastestLap": 0
+  },
   "drivers": [
     {
       "driverId": "antonelli",
