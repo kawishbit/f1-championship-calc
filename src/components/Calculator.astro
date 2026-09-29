@@ -1,0 +1,305 @@
+---
+import snapshot from "../data/snapshot.json";
+---
+
+<div class="app" data-snapshot={JSON.stringify(snapshot)}>
+  <header class="topbar">
+    <div class="brand">
+      <span class="chequer" aria-hidden="true"></span>
+      <div>
+        <h1>Championship Calculator</h1>
+        <p class="season">{snapshot.season} FIA Formula One World Championship&trade; fan calculator (unofficial)</p>
+      </div>
+    </div>
+    <div class="view-toggle" role="tablist" aria-label="Standings view">
+      <button type="button" data-view="drivers" role="tab" aria-selected="true">Drivers</button>
+      <button type="button" data-view="teams" role="tab" aria-selected="false">Constructors</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel standings-panel" aria-label="Standings">
+      <h2 id="standings-title">Driver standings</h2>
+      <ol id="standings" class="standings"></ol>
+    </section>
+
+    <section class="panel scenario-panel" aria-label="Scenario builder">
+      <div class="scenario-head">
+        <h2>Scenario</h2>
+        <p>Pick a contender, then assign finishes for the remaining rounds. Projected totals update live.</p>
+      </div>
+      <label class="contender-row">
+        Contender
+        <select id="contender"></select>
+        <span id="clinch" class="clinch" aria-live="polite"></span>
+      </label>
+      <div id="rounds" class="rounds"></div>
+      <button type="button" id="reset" class="reset">Reset scenario</button>
+    </section>
+  </main>
+</div>
+
+<script>
+  import { projectStandings, maxRemainingPoints, clinchState } from "../lib/championship.ts";
+
+  const root = document.querySelector(".app");
+  const data = JSON.parse(root.dataset.snapshot);
+
+  const standingsEl = document.getElementById("standings");
+  const standingsTitle = document.getElementById("standings-title");
+  const contenderEl = document.getElementById("contender");
+  const clinchEl = document.getElementById("clinch");
+  const roundsEl = document.getElementById("rounds");
+  const resetBtn = document.getElementById("reset");
+  const viewButtons = [...document.querySelectorAll("[data-view]")];
+
+  let view = "drivers";
+  const overrides = new Set();
+  const scenario = {};
+  const remaining = data.rounds.filter((r) => !r.played || overrides.has(r.raceId));
+  for (const r of remaining) scenario[r.raceId] = { race: [], sprint: [] };
+
+  const entries = () =>
+    view === "drivers"
+      ? data.drivers.map((d) => ({
+          id: d.driverId, label: d.name, sub: d.teamName,
+          colour: d.colour, photo: d.photo, code: d.code,
+          points: d.points, wins: d.wins,
+        }))
+      : data.teams.map((t) => ({
+          id: t.teamId, label: t.name, sub: null,
+          colour: t.colour, photo: null, code: null,
+          points: t.points, wins: t.wins,
+        }));
+
+  function resultOptions(count, selected) {
+    let html = `<option value="">—</option>`;
+    for (let i = 1; i <= count; i++) html += `<option value="${i}"${selected === i ? " selected" : ""}>P${i}</option>`;
+    return html;
+  }
+
+  function renderContenders(list, projected) {
+    const keep = contenderEl.value;
+    contenderEl.innerHTML = list
+      .map((e) => `<option value="${e.id}"${e.id === keep ? " selected" : ""}>${e.label}</option>`)
+      .join("");
+    if (![...contenderEl.options].some((o) => o.value === keep)) contenderEl.selectedIndex = 0;
+  }
+
+  function renderRounds(list) {
+    roundsEl.innerHTML = "";
+    for (const r of remaining) {
+      const picks = scenario[r.raceId];
+      const card = document.createElement("article");
+      card.className = "round";
+      card.innerHTML = `
+        <header><h3>${r.name}</h3><span class="round-meta">Round ${r.round}${r.sprint ? " · Sprint" : ""}</span></header>
+        <div class="picks"></div>`;
+      const picksEl = card.querySelector(".picks");
+      for (const e of list) {
+        const row = document.createElement("label");
+        row.className = "pick";
+        row.innerHTML = `<span class="pick-name"><i style="--c:${e.colour ?? "#666"}"></i>${e.label}</span>`;
+        const sel = document.createElement("select");
+        const pos = picks.race.indexOf(e.id) + 1;
+        sel.innerHTML = resultOptions(list.length, pos || "");
+        sel.setAttribute("aria-label", `${e.label} finishing position, ${r.name}`);
+        sel.addEventListener("change", () => {
+          const at = picks.race.indexOf(e.id);
+          if (at >= 0) picks.race.splice(at, 1);
+          const p = Number(sel.value);
+          if (p > 0) picks.race.splice(Math.min(p - 1, picks.race.length), 0, e.id);
+          render();
+        });
+        row.append(sel);
+        picksEl.append(row);
+        if (r.sprint) {
+          const srow = document.createElement("label");
+          srow.className = "pick sprint";
+          srow.innerHTML = `<span class="pick-name sprint-tag">Sprint · ${e.label}</span>`;
+          const ssel = document.createElement("select");
+          const spos = picks.sprint.indexOf(e.id) + 1;
+          ssel.innerHTML = resultOptions(8, spos || "");
+          ssel.setAttribute("aria-label", `${e.label} sprint position, ${r.name}`);
+          ssel.addEventListener("change", () => {
+            const at = picks.sprint.indexOf(e.id);
+            if (at >= 0) picks.sprint.splice(at, 1);
+            const p = Number(ssel.value);
+            if (p > 0) picks.sprint.splice(Math.min(p - 1, picks.sprint.length), 0, e.id);
+            render();
+          });
+          srow.append(ssel);
+          picksEl.append(srow);
+        }
+      }
+      roundsEl.append(card);
+    }
+  }
+
+  function render() {
+    const list = entries();
+    const base = list.map(({ id, points, wins }) => ({ id, points, wins }));
+    const projected = projectStandings(base, scenario);
+    const scored = new Map(projected.map((s) => [s.id, s]));
+    const maxLeft = maxRemainingPoints(remaining, scenario);
+
+    renderContenders(list, projected);
+    standingsTitle.textContent = view === "drivers" ? "Driver standings" : "Constructor standings";
+    standingsEl.innerHTML = "";
+    for (const s of projected) {
+      const e = list.find((x) => x.id === s.id);
+      const li = document.createElement("li");
+      li.className = "row";
+      li.innerHTML = `
+        <span class="pos" style="--c:${e.colour ?? "#666"}">${projected.indexOf(s) + 1}</span>
+        ${e.photo ? `<img class="photo" src="${e.photo}" alt="" loading="lazy" />` : `<span class="photo fallback" aria-hidden="true">${(e.code ?? e.label).slice(0, 3)}</span>`}
+        <span class="who"><strong>${e.label}</strong>${e.sub ? `<small>${e.sub}</small>` : ""}<span class="ptsline">${s.points} pts · ${s.wins} wins</span></span>
+        ${contenderEl.value === e.id ? `<span class="badge" data-clinch>${clinchState(projected, e.id, maxLeft)}</span>` : ""}`;
+      standingsEl.append(li);
+    }
+
+    if (roundsEl.childElementCount === 0) renderRounds(list);
+    const state = clinchState(projected, contenderEl.value, maxLeft);
+    clinchEl.dataset.state = state;
+    clinchEl.textContent = state === "clinched" ? "has clinched" : state === "eliminated" ? "eliminated" : "still alive";
+  }
+
+  contenderEl.addEventListener("change", render);
+  resetBtn.addEventListener("click", () => {
+    for (const r of remaining) scenario[r.raceId] = { race: [], sprint: [] };
+    roundsEl.innerHTML = "";
+    render();
+  });
+  for (const b of viewButtons) {
+    b.addEventListener("click", () => {
+      view = b.dataset.view;
+      for (const x of viewButtons) x.setAttribute("aria-selected", String(x === b));
+      for (const r of remaining) scenario[r.raceId] = { race: [], sprint: [] };
+      roundsEl.innerHTML = "";
+      render();
+    });
+  }
+
+  render();
+</script>
+
+<style>
+  @font-face {
+    font-family: "Titillium Web";
+    src: url("/fonts/titillium-400.woff2") format("woff2");
+    font-weight: 400; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Titillium Web";
+    src: url("/fonts/titillium-600.woff2") format("woff2");
+    font-weight: 600; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Titillium Web";
+    src: url("/fonts/titillium-700.woff2") format("woff2");
+    font-weight: 700; font-style: normal; font-display: swap;
+  }
+  @font-face {
+    font-family: "Titillium Web";
+    src: url("/fonts/titillium-600italic.woff2") format("woff2");
+    font-weight: 600; font-style: italic; font-display: swap;
+  }
+  @font-face {
+    font-family: "Titillium Web";
+    src: url("/fonts/titillium-700italic.woff2") format("woff2");
+    font-weight: 700; font-style: italic; font-display: swap;
+  }
+
+  .app {
+    --carbon: #15151e;
+    --carbon-2: #1e1e27;
+    --line: #2c2c38;
+    --ink: #f2f0f5;
+    --muted: #a7a5b3;
+    --f1red: #e10600;
+    --good: #00c853;
+    --bad: #ff3d47;
+    font-family: "Titillium Web", system-ui, sans-serif;
+    background: var(--carbon);
+    color: var(--ink);
+    min-height: 100vh;
+  }
+  .topbar {
+    display: flex; flex-wrap: wrap; gap: 1rem;
+    align-items: center; justify-content: space-between;
+    padding: 1rem clamp(1rem, 4vw, 2.5rem);
+    border-bottom: 3px solid var(--f1red);
+    background: #0c0c12;
+  }
+  .brand { display: flex; gap: 0.9rem; align-items: center; }
+  .brand h1 { font-size: 1.5rem; margin: 0; font-style: italic; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+  .season { margin: 0.1rem 0 0; color: var(--muted); font-size: 0.85rem; }
+  .chequer {
+    width: 44px; height: 44px; flex: none;
+    background:
+      repeating-conic-gradient(#f2f0f5 0 25%, #101016 0 50%) 0 0 / 22px 22px;
+    border-radius: 6px; transform: skewX(-8deg);
+  }
+  .view-toggle { display: flex; gap: 0.5rem; }
+  .view-toggle button {
+    font: inherit; font-weight: 700; font-style: italic; text-transform: uppercase;
+    background: var(--carbon-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0.5rem 1.1rem; cursor: pointer;
+  }
+  .view-toggle button[aria-selected="true"] { background: var(--f1red); border-color: var(--f1red); }
+  main {
+    display: grid; gap: 1.25rem;
+    grid-template-columns: minmax(320px, 5fr) minmax(320px, 7fr);
+    padding: 1.25rem clamp(1rem, 4vw, 2.5rem) 3rem;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--carbon-2); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.1rem; }
+  .panel h2 { margin: 0 0 0.75rem; font-style: italic; text-transform: uppercase; font-size: 1.1rem; }
+  .scenario-head p { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
+  .standings { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+  .row {
+    display: grid; grid-template-columns: 1.6rem 44px minmax(0, 1fr); gap: 0.6rem; align-items: center;
+    background: var(--carbon); border: 1px solid var(--line); border-radius: 6px; padding: 0.4rem 0.6rem;
+  }
+  .pos {
+    font-weight: 700; font-style: italic; text-align: center;
+    border-left: 4px solid var(--c); border-radius: 2px;
+  }
+  .photo { width: 44px; height: 44px; object-fit: cover; object-position: top; border-radius: 50%; background: #0c0c12; }
+  .photo.fallback { display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem; color: var(--muted); }
+  .who { min-width: 0; display: flex; flex-direction: column; }
+  .who strong { font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who small { color: var(--muted); font-size: 0.75rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ptsline { font-size: 0.8rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+  .badge {
+    grid-column: 1 / -1; justify-self: start;
+    font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 0.15rem 0.6rem; border-radius: 999px; background: var(--line);
+  }
+  .badge[data-clinch="clinched"] { background: var(--good); color: #06130b; }
+  .badge[data-clinch="eliminated"] { background: var(--bad); color: #1c0608; }
+  .contender-row { display: flex; gap: 0.6rem; align-items: center; margin-bottom: 1rem; font-weight: 600; }
+  select {
+    font: inherit; background: var(--carbon); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 4px; padding: 0.35rem 0.5rem; max-width: 100%;
+  }
+  .clinch { font-style: italic; color: var(--muted); }
+  .clinch[data-state="clinched"] { color: var(--good); font-weight: 700; }
+  .clinch[data-state="eliminated"] { color: var(--bad); font-weight: 700; }
+  .rounds { display: grid; gap: 1rem; }
+  .round { border: 1px solid var(--line); border-radius: 6px; padding: 0.7rem 0.8rem; background: var(--carbon); }
+  .round header { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; margin-bottom: 0.6rem; }
+  .round h3 { margin: 0; font-size: 0.95rem; font-style: italic; }
+  .round-meta { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+  .picks { display: grid; gap: 0.3rem; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .pick { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+  .pick-name { display: flex; align-items: center; gap: 0.45rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pick-name i { width: 4px; align-self: stretch; background: var(--c); border-radius: 2px; }
+  .sprint-tag { color: var(--muted); }
+  .reset {
+    margin-top: 1rem; font: inherit; font-weight: 700; text-transform: uppercase; font-style: italic;
+    background: transparent; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 4px; padding: 0.5rem 1.1rem; cursor: pointer;
+  }
+  .reset:hover { border-color: var(--f1red); color: var(--f1red); }
+</style>
