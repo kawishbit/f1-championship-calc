@@ -2,6 +2,17 @@
   <img src="./assets/readme/hero.svg" width="100%" alt="f1-championship-calc: what would it take for your driver to win the F1 title">
 </p>
 
+<p align="center">
+  <a href="https://github.com/kawishbit/f1-championship-calc/actions/workflows/refresh.yml"><img src="https://img.shields.io/github/actions/workflow/status/kawishbit/f1-championship-calc/refresh.yml?branch=main&label=data%20refresh" alt="Data refresh workflow status"></a>
+  <a href="https://github.com/kawishbit/f1-championship-calc/commits/main"><img src="https://img.shields.io/github/last-commit/kawishbit/f1-championship-calc" alt="Last commit"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/kawishbit/f1-championship-calc" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/Astro-7-BC52EE?logo=astro&logoColor=white" alt="Astro 7">
+  <img src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
+  <img src="https://img.shields.io/badge/Node-22.x-5FA04E?logo=nodedotjs&logoColor=white" alt="Node 22.x">
+  <img src="https://img.shields.io/badge/pnpm-F69220?logo=pnpm&logoColor=white" alt="pnpm">
+  <img src="https://img.shields.io/badge/deployed%20on-Vercel-000000?logo=vercel&logoColor=white" alt="Deployed on Vercel">
+</p>
+
 # f1-championship-calc
 
 **What would it take for your driver to win the F1 title?** A fan calculator that takes the current standings plus the remaining rounds and answers exactly that — for drivers and constructors.
