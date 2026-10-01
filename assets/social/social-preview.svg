@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1280" height="640" viewBox="0 0 1280 640"
+     role="img" aria-labelledby="title desc">
+  <title id="title">f1-championship-calc — what would it take to win the title</title>
+  <desc id="desc">GitHub social preview: Championship Calc title, tagline, and an illustrative standings panel with a shortest-path solver strip.</desc>
+
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .display { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; font-weight: 800; font-style: italic; }
+  </style>
+
+  <rect width="1280" height="640" fill="#0A0A0F"/>
+  <rect x="0" y="0" width="1280" height="8" fill="#E10600"/>
+
+  <!-- track ribbon -->
+  <path d="M-40 560 C 260 500, 460 620, 760 556 S 1140 494, 1320 548 L1320 700 L-40 700 Z" fill="#121218"/>
+  <path d="M-40 560 C 260 500, 460 620, 760 556 S 1140 494, 1320 548" fill="none" stroke="#E10600" stroke-opacity="0.35" stroke-width="4"/>
+
+  <!-- chequered flag accent -->
+  <g opacity="0.5">
+    <rect x="1140" y="48" width="20" height="20" fill="#F5F3F7"/>
+    <rect x="1180" y="48" width="20" height="20" fill="#F5F3F7"/>
+    <rect x="1160" y="68" width="20" height="20" fill="#F5F3F7"/>
+  </g>
+
+  <!-- LEFT: title -->
+  <g transform="translate(80 120)">
+    <g>
+      <rect x="0" y="0" width="10" height="32" fill="#E10600" transform="skewX(-22)"/>
+      <rect x="16" y="0" width="10" height="32" fill="#E10600" opacity="0.65" transform="skewX(-22)"/>
+      <rect x="32" y="0" width="10" height="32" fill="#E10600" opacity="0.35" transform="skewX(-22)"/>
+    </g>
+    <text x="62" y="23" class="mono" font-size="18" letter-spacing="3.5" fill="#A7A3B5">FORMULA ONE &#183; FAN CALCULATOR</text>
+    <text id="t1" x="0" y="118" class="display" font-size="72" letter-spacing="1" fill="#F5F3F7">CHAMPIONSHIP</text>
+    <text x="0" y="198" class="display" font-size="72" letter-spacing="1" fill="#F5F3F7">CALC<tspan fill="#E10600">.</tspan></text>
+    <text x="0" id="tag" y="256" class="sans" font-size="26" font-weight="400" fill="#D8D5E0">What would it take for your driver</text>
+    <text x="0" y="292" class="sans" font-size="26" font-weight="400" fill="#D8D5E0">to win the title?</text>
+  </g>
+
+  <!-- repo slug -->
+  <text x="80" y="512" class="mono" font-size="20" letter-spacing="1" fill="#A7A3B5">github.com/kawishbit/<tspan fill="#F5F3F7">f1-championship-calc</tspan></text>
+
+  <!-- RIGHT: illustrative standings -->
+  <g transform="translate(772 150)">
+    <rect x="0" y="0" width="428" height="290" rx="16" fill="#121218" stroke="#2A2A34" stroke-width="2"/>
+    <text x="28" y="42" class="mono" font-size="16" letter-spacing="2.5" fill="#A7A3B5">STANDINGS &#183; ILLUSTRATIVE</text>
+
+    <rect x="0" y="62" width="6" height="50" fill="#4781D7"/>
+    <text x="28" y="97" class="display" font-size="26" fill="#A7A3B5">1</text>
+    <text x="60" y="97" class="display" font-size="26" fill="#F5F3F7">VER</text>
+    <rect x="148" y="80" width="160" height="13" rx="6.5" fill="#2A2A34"/>
+    <rect x="148" y="80" width="160" height="13" rx="6.5" fill="#4781D7"/>
+    <text x="328" y="98" class="mono" font-size="22" font-weight="700" fill="#F5F3F7">312</text>
+
+    <rect x="0" y="120" width="6" height="50" fill="#ED1131"/>
+    <text x="28" y="155" class="display" font-size="26" fill="#A7A3B5">2</text>
+    <text x="60" y="155" class="display" font-size="26" fill="#F5F3F7">HAM</text>
+    <rect x="148" y="138" width="160" height="13" rx="6.5" fill="#2A2A34"/>
+    <rect x="148" y="138" width="135" height="13" rx="6.5" fill="#ED1131"/>
+    <text x="328" y="156" class="mono" font-size="22" font-weight="700" fill="#F5F3F7">264</text>
+
+    <rect x="0" y="178" width="6" height="50" fill="#00D7B6"/>
+    <text x="28" y="213" class="display" font-size="26" fill="#A7A3B5">3</text>
+    <text x="60" y="213" class="display" font-size="26" fill="#F5F3F7">ANT</text>
+    <rect x="148" y="196" width="160" height="13" rx="6.5" fill="#2A2A34"/>
+    <rect x="148" y="196" width="119" height="13" rx="6.5" fill="#00D7B6"/>
+    <text x="328" y="214" class="mono" font-size="22" font-weight="700" fill="#F5F3F7">232</text>
+
+    <clipPath id="panelClip"><rect x="0" y="0" width="428" height="290" rx="16"/></clipPath>
+    <g clip-path="url(#panelClip)">
+      <rect x="0" y="242" width="428" height="48" fill="#E10600" fill-opacity="0.14"/>
+      <rect x="0" y="242" width="6" height="48" fill="#00D26A"/>
+    </g>
+    <text x="28" y="273" class="mono" font-size="17" font-weight="700" fill="#F5F3F7">PICK A DRIVER &#8594; SHORTEST PATH TO P1</text>
+  </g>
+</svg>
