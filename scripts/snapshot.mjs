@@ -1,18 +1,40 @@
  // Build-time data snapshot: f1api.dev (standings + schedule) + OpenF1 (headshots + team colours) + Jolpica (sprint flags) + hardcoded points system (no API publishes it).
  // Output: src/data/snapshot.json (checked in, offline fallback) + public/drivers/*.png.
  // Usage: pnpm run snapshot
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const UA = { "User-Agent": "f1-championship-calc snapshot script" };
 
-async function getJson(url) {
-  const res = await fetch(url, { headers: UA });
-  if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
-  return res.json();
+class HttpError extends Error {
+  constructor(url, status) {
+    super(`GET ${url} -> ${status}`);
+    this.status = status;
+  }
 }
+
+// The upstream APIs are free and occasionally flaky: retry transient failures, but
+// never a 404 (that is an answer, e.g. a season that has no data yet).
+async function getJson(url) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const res = await fetch(url, { headers: UA });
+      if (!res.ok) throw new HttpError(url, res.status);
+      return await res.json();
+    } catch (err) {
+      if (err.status === 404 || attempt === 3) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
+    }
+  }
+}
+
+const getOptionalJson = (url) =>
+  getJson(url).catch((err) => {
+    if (err.status === 404) return null;
+    throw err;
+  });
 
 async function getBytes(url) {
   const res = await fetch(url, { headers: UA });
@@ -25,21 +47,49 @@ async function getBytes(url) {
 // of that driver's row; the two APIs disagree on car numbers, so the join key is the
 // three-letter driver code (f1api `shortName` == OpenF1 `name_acronym`).
 
-const season = (await getJson("https://f1api.dev/api/current")).season;
+const current = await getJson("https://f1api.dev/api/current");
+const season = current.season;
 console.log(`season: ${season}`);
 
- const [driversChamp, teamsChamp, teams, drivers, current, openf1, jolpica] = await Promise.all([
-   getJson(`https://f1api.dev/api/${season}/drivers-championship`),
-   getJson(`https://f1api.dev/api/${season}/constructors-championship`),
-   getJson(`https://f1api.dev/api/${season}/teams`),
-   getJson(`https://f1api.dev/api/${season}/drivers`),
-   getJson("https://f1api.dev/api/current"),
-   getJson("https://api.openf1.org/v1/drivers?session_key=latest"),
-   getJson(`https://api.jolpi.ca/ergast/f1/${season}.json?limit=100`).catch((err) => {
-     console.log(`jolpica failed, falling back to f1api sprint flags: ${err.message}`);
-     return null;
-   }),
- ]);
+// A new season is published before any race has run, so its standings endpoints may
+// 404 or be empty while the drivers/teams lists already exist. Never fetch these as
+// required: preseason falls back to zero-point rows below.
+const [driversChamp, teamsChamp, teams, drivers, openf1, jolpica] = await Promise.all([
+  getOptionalJson(`https://f1api.dev/api/${season}/drivers-championship`),
+  getOptionalJson(`https://f1api.dev/api/${season}/constructors-championship`),
+  getOptionalJson(`https://f1api.dev/api/${season}/teams`),
+  getOptionalJson(`https://f1api.dev/api/${season}/drivers`),
+  getJson("https://api.openf1.org/v1/drivers?session_key=latest"),
+  getJson(`https://api.jolpi.ca/ergast/f1/${season}.json?limit=100`).catch((err) => {
+    console.log(`jolpica failed, falling back to f1api sprint flags: ${err.message}`);
+    return null;
+  }),
+]);
+
+if (!teams || !drivers) {
+  // The season has rolled over but the grid is not published yet. Keep the committed
+  // snapshot (last season's final standings) and let the next scheduled run retry.
+  console.log(`season ${season}: f1api.dev has no drivers/teams yet; keeping existing snapshot`);
+  process.exit(0);
+}
+
+const existing = await readFile(path.join(root, "src/data/snapshot.json"), "utf8")
+  .then(JSON.parse)
+  .catch(() => null);
+if (existing && existing.season > season) {
+  throw new Error(`upstream season ${season} is older than snapshot season ${existing.season}; refusing to downgrade`);
+}
+
+// Preseason (or a not-yet-published standings table): everyone on zero, in grid order.
+const driverRows =
+  driversChamp?.drivers_championship?.length
+    ? driversChamp.drivers_championship
+    : drivers.drivers.map((d, i) => ({ driverId: d.driverId, teamId: d.teamId, points: 0, wins: 0, position: i + 1 }));
+const teamRows =
+  teamsChamp?.constructors_championship?.length
+    ? teamsChamp.constructors_championship
+    : teams.teams.map((t, i) => ({ teamId: t.teamId, points: 0, wins: 0, position: i + 1 }));
+if (!driversChamp?.drivers_championship?.length) console.log("standings: none published yet, using zero-point grid");
 
 const byCode = new Map();
 for (const d of openf1) byCode.set(d.name_acronym, d);
@@ -49,7 +99,7 @@ const teamColour = new Map(); // teamId -> hex from OpenF1
 const f1Drivers = new Map(drivers.drivers.map((d) => [d.driverId, d]));
 
 const outDrivers = [];
-for (const row of driversChamp.drivers_championship) {
+for (const row of driverRows) {
   const info = f1Drivers.get(row.driverId) ?? {};
   const code = info.shortName ?? row.driverId.slice(0, 3).toUpperCase();
   const o1 = byCode.get(code);
@@ -88,7 +138,7 @@ for (const d of outDrivers) {
   }
 }
 
-const outTeams = teamsChamp.constructors_championship.map((row) => ({
+const outTeams = teamRows.map((row) => ({
   teamId: row.teamId,
   name: teamNames.get(row.teamId) ?? row.teamId,
   colour: teamColour.get(row.teamId) ?? null,

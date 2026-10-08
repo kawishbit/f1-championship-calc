@@ -2,19 +2,27 @@ name: Refresh F1 data
 
 "on":
   schedule:
-    # Mondays 06:00 UTC — after race weekends, when standings actually move.
-    - cron: "0 6 * * 1"
-  workflow_dispatch: # manual "Run workflow" button for same-day refresh after a race
+    # Every 6 hours, every day. Standings move after each race (Sunday, or early
+    # Monday UTC for the late flyaways), the next season's grid and calendar appear
+    # in the offseason at an unpredictable time, and a run with no data change
+    # commits nothing, so polling is cheap and needs no race calendar.
+    - cron: "0 */6 * * *"
+  workflow_dispatch: # manual "Run workflow" button for an immediate refresh
 
 permissions:
-  contents: write
+  contents: write # push the refreshed snapshot
+  actions: write # re-enable this schedule (see keepalive step)
+
+concurrency:
+  group: refresh-f1-data
+  cancel-in-progress: false
 
 jobs:
   snapshot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -32,5 +40,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "chore: weekly F1 data refresh"
+          git commit -m "chore: refresh F1 data"
+          git pull --rebase
           git push
+      - name: Keep schedule alive
+        if: ${{ !cancelled() }}
+        # GitHub disables scheduled workflows after 60 days without repo activity, and
+        # the winter break between seasons is longer than that. Re-enabling resets the timer.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/refresh.yml/enable"

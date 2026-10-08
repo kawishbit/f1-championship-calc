@@ -2,6 +2,7 @@
   "name": "f1-championship-calc",
   "type": "module",
   "version": "0.0.1",
+  "packageManager": "pnpm@10.33.0",
   "engines": {
     "node": "22.x"
   },

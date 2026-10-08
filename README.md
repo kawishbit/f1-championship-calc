@@ -31,7 +31,7 @@ Pick a driver — say Norris in P4 — and the solver answers the shortest path 
 
 ## How it works
 
-`scripts/snapshot.mjs` pulls standings and calendars from f1api.dev, OpenF1, and Jolpica into `src/data/snapshot.json`. Pure functions in `src/lib/championship.ts` do the math (`availablePoints`, `leastEffortPath`, `projectStandings`, `clinchState`); `src/components/Calculator.astro` renders the Astro UI. Data refreshes weekly via `.github/workflows/refresh.yml` (Mondays 06:00 UTC, plus manual runs after a race).
+`scripts/snapshot.mjs` pulls standings and calendars from f1api.dev, OpenF1, and Jolpica into `src/data/snapshot.json`. Pure functions in `src/lib/championship.ts` do the math (`availablePoints`, `leastEffortPath`, `projectStandings`, `clinchState`); `src/components/Calculator.astro` renders the Astro UI. Data refreshes every 6 hours via `.github/workflows/refresh.yml` (plus manual runs); a run commits only when the data changed, which triggers the Vercel redeploy. New seasons are picked up automatically once the API publishes the grid.
 
 Glossary: **standings** (points table) · **scenario** (your assigned finishes for remaining rounds) · **clinch** (mathematically certain regardless of other outcomes) · **round** (one Grand Prix weekend, optionally with a sprint).
 
