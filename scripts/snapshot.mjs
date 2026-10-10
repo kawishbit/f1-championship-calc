@@ -16,7 +16,8 @@ class HttpError extends Error {
 }
 
 // The upstream APIs are free and occasionally flaky: retry transient failures, but
-// never a 404 (that is an answer, e.g. a season that has no data yet).
+// never a 4xx (that is an answer, e.g. a season with no data yet, or OpenF1 locking
+// out unauthenticated callers during a live session).
 async function getJson(url) {
   for (let attempt = 1; ; attempt++) {
     try {
@@ -24,7 +25,7 @@ async function getJson(url) {
       if (!res.ok) throw new HttpError(url, res.status);
       return await res.json();
     } catch (err) {
-      if (err.status === 404 || attempt === 3) throw err;
+      if ((err.status !== undefined && err.status < 500) || attempt === 3) throw err;
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt));
     }
   }
@@ -59,7 +60,13 @@ const [driversChamp, teamsChamp, teams, drivers, openf1, jolpica] = await Promis
   getOptionalJson(`https://f1api.dev/api/${season}/constructors-championship`),
   getOptionalJson(`https://f1api.dev/api/${season}/teams`),
   getOptionalJson(`https://f1api.dev/api/${season}/drivers`),
-  getJson("https://api.openf1.org/v1/drivers?session_key=latest"),
+  // OpenF1 answers 401 to everyone without an API key while an F1 session is live
+  // (practice, quali, sprint, race), i.e. most of every race weekend. It only supplies
+  // cosmetics, so a failure must not fail the refresh: see the previous-snapshot fallback.
+  getJson("https://api.openf1.org/v1/drivers?session_key=latest").catch((err) => {
+    console.log(`openf1 failed, keeping previous colours and photos: ${err.message}`);
+    return null;
+  }),
   getJson(`https://api.jolpi.ca/ergast/f1/${season}.json?limit=100`).catch((err) => {
     console.log(`jolpica failed, falling back to f1api sprint flags: ${err.message}`);
     return null;
@@ -92,7 +99,11 @@ const teamRows =
 if (!driversChamp?.drivers_championship?.length) console.log("standings: none published yet, using zero-point grid");
 
 const byCode = new Map();
-for (const d of openf1) byCode.set(d.name_acronym, d);
+for (const d of openf1 ?? []) byCode.set(d.name_acronym, d);
+
+// Cosmetics from the previous snapshot, used whenever OpenF1 has nothing for a driver/team.
+const prevDrivers = new Map((existing?.drivers ?? []).map((d) => [d.driverId, d]));
+const prevTeams = new Map((existing?.teams ?? []).map((t) => [t.teamId, t]));
 
 const teamNames = new Map(teams.teams.map((t) => [t.teamId, t.teamName]));
 const teamColour = new Map(); // teamId -> hex from OpenF1
@@ -103,7 +114,7 @@ for (const row of driverRows) {
   const info = f1Drivers.get(row.driverId) ?? {};
   const code = info.shortName ?? row.driverId.slice(0, 3).toUpperCase();
   const o1 = byCode.get(code);
-  const colour = o1?.team_colour ? `#${o1.team_colour}` : null;
+  const colour = o1?.team_colour ? `#${o1.team_colour}` : (prevDrivers.get(row.driverId)?.colour ?? null);
   if (colour && !teamColour.has(row.teamId)) teamColour.set(row.teamId, colour);
   outDrivers.push({
     driverId: row.driverId,
@@ -113,7 +124,7 @@ for (const row of driverRows) {
     teamId: row.teamId,
     teamName: teamNames.get(row.teamId) ?? row.teamId,
     colour,
-    photo: null, // filled below after download
+    photo: prevDrivers.get(row.driverId)?.photo ?? null, // replaced below when a fresh photo downloads
     points: row.points,
     wins: row.wins,
     position: row.position,
@@ -141,7 +152,7 @@ for (const d of outDrivers) {
 const outTeams = teamRows.map((row) => ({
   teamId: row.teamId,
   name: teamNames.get(row.teamId) ?? row.teamId,
-  colour: teamColour.get(row.teamId) ?? null,
+  colour: teamColour.get(row.teamId) ?? prevTeams.get(row.teamId)?.colour ?? null,
   points: row.points,
   wins: row.wins,
   position: row.position,

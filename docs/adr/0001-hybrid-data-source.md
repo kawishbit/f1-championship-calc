@@ -11,3 +11,7 @@
 ## Season rollover
 
 The season comes from `f1api.dev/api/current`, so the snapshot follows the API into a new year with no code change. Before round 1 the standings endpoints may be empty or 404: the script then builds a zero-point grid from the drivers/teams lists, and if even those are missing it exits 0 leaving the previous snapshot in place for the next run to retry. The 6-hourly cadence (rather than race-day-only) is what makes this work, since nobody knows when the new grid is published. The workflow also re-enables itself each run, because GitHub disables schedules after 60 days of repo inactivity and the winter break outlasts that.
+
+## OpenF1 is optional
+
+OpenF1 returns 401 to unauthenticated callers whenever an F1 session is live, which covers most of every race weekend. It only supplies headshots and team colours, so the snapshot treats it as best-effort: on failure each driver and team keeps its colour and photo from the previous snapshot, and the refresh still succeeds with f1api.dev standings. Standings and schedule (f1api.dev) remain required.
