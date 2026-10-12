@@ -7,9 +7,9 @@ export const prerender = false;
 // F1's CDN answers a missing photo with a generic placeholder image rather than an error, so a
 // tiny body means "no photo": answer 404 with a short cache and the page shows initials instead.
 const MIN_PHOTO_BYTES = 2048;
-const PHOTO_CACHE = 'public, s-maxage=2592000'; // 30 days
+const PHOTO_CACHE = 'public, max-age=86400, s-maxage=2592000'; // browsers 1 day, CDN 30 days
 const PHOTO_TIMEOUT_MS = 5000;
-const MISS_CACHE = 'public, s-maxage=60';
+const MISS_CACHE = 'public, max-age=0, s-maxage=60';
 
 export const GET: APIRoute = async ({ params }) => {
   const miss = () => new Response(null, { status: 404, headers: { 'Cache-Control': MISS_CACHE } });

@@ -6,9 +6,11 @@ import { loadSnapshot } from '../lib/load-snapshot.ts';
 export const prerender = false;
 
 const { snapshot, cacheSeconds, stale } = await loadSnapshot();
-// Vercel ISR honours this header: live data stays cached until the next Grand Prix is scored,
-// the committed fallback only for a few minutes so the next visit retries OpenF1.
-Astro.response.headers.set('Cache-Control', `public, s-maxage=${cacheSeconds}`);
+// Vercel ISR honours s-maxage: live data stays cached until the next Grand Prix is scored, the
+// committed fallback only for a few minutes so the next visit retries OpenF1. Vercel strips
+// s-maxage before the response leaves its CDN, so browsers see max-age=0 and always revalidate:
+// a visitor never keeps an old copy past what the CDN serves.
+Astro.response.headers.set('Cache-Control', `public, max-age=0, must-revalidate, s-maxage=${cacheSeconds}`);
 ---
 
 <Layout>
