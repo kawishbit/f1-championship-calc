@@ -1,5 +1,12 @@
 ---
-import snapshot from "../data/snapshot.json";
+import type { Snapshot } from "../lib/snapshot.ts";
+
+interface Props {
+  snapshot: Snapshot;
+  /** OpenF1 could not be read, so `snapshot` is the committed fallback. */
+  stale?: boolean;
+}
+const { snapshot, stale = false } = Astro.props;
 
 const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   day: "numeric",
@@ -29,6 +36,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
         <h2 id="standings-title">Driver standings</h2>
         <span class="updated">Updated {updated}</span>
       </div>
+      {stale && <p class="notice" role="status">Live data from OpenF1 is unavailable right now, so these standings may be out of date. They refresh automatically.</p>}
       <ol id="standings" class="standings"></ol>
     </section>
 
@@ -85,7 +93,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   </main>
 
   <footer>
-    <p>Unofficial fan project. Data: f1api.dev + OpenF1 + Jolpica. Photos: F1 CDN via OpenF1.</p>
+    <p>Unofficial fan project. Data: OpenF1. Photos: F1 CDN.</p>
   </footer>
 </div>
 
@@ -95,10 +103,25 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
    const root = document.querySelector(".app");
    const data = JSON.parse(root.dataset.snapshot);
    const POINTS = data.points ?? { race: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1], sprint: [8, 7, 6, 5, 4, 3, 2, 1], fastestLap: 0 };
-   const N_DRIVERS = data.drivers.length;
+   // Drivers who have left the grid keep their points in the table but cannot be given finishes.
+   const N_DRIVERS = data.drivers.filter((d) => !d.departed).length;
    const N_TEAMS = data.teams.length;
 
    const standingsEl = document.getElementById("standings");
+   // The photo route answers 404 for drivers F1 has no picture of: swap in initials on a
+   // team-colour disc and remember it, so re-rendering the table does not ask again.
+   const missingPhotos = new Set();
+   standingsEl.addEventListener("error", (ev) => {
+     const img = ev.target;
+     if (!(img instanceof HTMLImageElement) || !img.classList.contains("photo")) return;
+     missingPhotos.add(new URL(img.src).pathname);
+     const disc = document.createElement("span");
+     disc.className = "photo fallback";
+     disc.style.setProperty("--c", img.dataset.colour);
+     disc.setAttribute("aria-hidden", "true");
+     disc.textContent = img.dataset.initials;
+     img.replaceWith(disc);
+   }, true);
    const standingsTitle = document.getElementById("standings-title");
    const contenderEl = document.getElementById("contender");
    const targetEl = document.getElementById("target");
@@ -128,13 +151,14 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
       ? data.drivers.map((d) => ({
           id: d.driverId, label: d.name, sub: d.teamName,
           colour: d.colour, photo: d.photo, code: d.code,
-          points: d.points, wins: d.wins,
+          points: d.points, wins: d.wins, departed: Boolean(d.departed),
         }))
       : data.teams.map((t) => ({
           id: t.teamId, label: t.name, sub: null,
           colour: t.colour, photo: null, code: null,
-          points: t.points, wins: t.wins,
+          points: t.points, wins: t.wins, departed: false,
         }));
+  const activeEntries = () => entries().filter((e) => !e.departed);
 
   function resultOptions(count, selected) {
     let html = `<option value="">—</option>`;
@@ -269,13 +293,13 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
      const r = remaining.find((x) => x.raceId === details.dataset.race);
      const wrap = details.querySelector(".round-lists");
      wrap.innerHTML = "";
-     wrap.append(orderList({ picks, key: "race", roundLabel: r.name, max: N_DRIVERS, labelled: entries() }));
+     wrap.append(orderList({ picks, key: "race", roundLabel: r.name, max: N_DRIVERS, labelled: activeEntries() }));
      if (r.sprint) {
        const h = document.createElement("h4");
        h.className = "event-head";
        h.textContent = "Sprint";
        wrap.append(h);
-       wrap.append(orderList({ picks, key: "sprint", roundLabel: r.name, max: POINTS.sprint.length, labelled: entries() }));
+       wrap.append(orderList({ picks, key: "sprint", roundLabel: r.name, max: POINTS.sprint.length, labelled: activeEntries() }));
      }
      renderStandings();
      refreshCounts();
@@ -393,7 +417,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
        if (moved) li.dataset.moved = "true";
        li.innerHTML = `
          <span class="pos" style="--c:${e.colour ?? "#666"}">${pos}</span>
-         ${e.photo ? `<img class="photo" src="${e.photo}" alt="" loading="lazy" />` : `<span class="photo fallback" style="--c:${e.colour ?? "#666"}" aria-hidden="true">${(e.code ?? e.label).slice(0, 3)}</span>`}
+         ${e.photo && !missingPhotos.has(e.photo) ? `<img class="photo" src="${e.photo}" alt="" loading="lazy" data-colour="${e.colour ?? "#666"}" data-initials="${(e.code ?? e.label).slice(0, 3)}" />` : `<span class="photo fallback" style="--c:${e.colour ?? "#666"}" aria-hidden="true">${(e.code ?? e.label).slice(0, 3)}</span>`}
          <span class="who"><strong>${e.label}</strong>${e.sub ? `<small>${e.sub}</small>` : ""}</span>
          <span class="pts"><strong>${s.points}</strong><small>${pos === 1 ? "Leader" : `+${leaderPts - s.points}`} · ${s.wins} win${s.wins === 1 ? "" : "s"}</small></span>`;
        standingsEl.append(li);
@@ -444,9 +468,9 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
 
    function render() {
      const list = entries();
-     renderContenders(list);
+     renderContenders(activeEntries());
      renderTargets(list);
-     renderBulk(list);
+     renderBulk(activeEntries());
      renderAvail();
      builderEl.hidden = view !== "drivers";
      renderStandings();
@@ -472,7 +496,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
        // Sprint copies the race order when the finish scores (top 8).
        // Strip the driver first: insertPick shifts the removal null along,
        // which would leave a gap and drop the tail when already at target.
-       const field = scenario[r.raceId].race.length ? scenario[r.raceId].race : entries().map((e) => e.id);
+       const field = scenario[r.raceId].race.length ? scenario[r.raceId].race : activeEntries().map((e) => e.id);
        scenario[r.raceId].race = insertPick(field.filter((x) => x && x !== id), id, pos, N_DRIVERS);
        scenario[r.raceId].touched = true;
        if (r.sprint && pos <= 8) {
@@ -480,7 +504,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
          scenario[r.raceId].sprint = insertPick(sField.filter((x) => x && x !== id), id, pos, POINTS.sprint.length);
        }
      }
-     buildRounds(entries());
+     buildRounds(activeEntries());
      renderStandings();
      refreshCounts();
      renderImpact();
@@ -488,7 +512,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
    });
    resetBtn.addEventListener("click", () => {
      resetScenario();
-     buildRounds(entries());
+     buildRounds(activeEntries());
      render();
    });
    document.addEventListener("click", (ev) => {
@@ -503,12 +527,12 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
        view = b.dataset.view;
        for (const x of viewButtons) x.setAttribute("aria-selected", String(x === b));
        resetScenario();
-       buildRounds(entries());
+       buildRounds(activeEntries());
        render();
      });
    }
 
-   buildRounds(entries());
+   buildRounds(activeEntries());
    render();
  </script>
 
@@ -617,6 +641,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
     text-transform: uppercase; letter-spacing: 0.03em; font-size: 1rem;
     border-left: 4px solid var(--f1red); padding-left: 0.55rem;
   }
+  .notice { margin: 0 0 0.75rem; padding: 0.5rem 0.75rem; border: 1px solid var(--line); border-left: 3px solid var(--f1red); color: var(--muted); font-size: 0.78rem; }
   .updated, .pick-total { color: var(--faint); font-size: 0.75rem; white-space: nowrap; }
   .pick-total:not(:empty) { color: var(--f1red-ink); font-weight: 700; }
   .hint { margin: 0 0 0.9rem; color: var(--ink); font-size: 0.9rem; opacity: 0.92; }
