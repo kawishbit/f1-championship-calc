@@ -65,3 +65,9 @@ Notes from the build:
 - The committed `src/data/snapshot.json` is regenerated against OpenF1; run `pnpm run snapshot` now and then so the fallback is not ancient.
 
 **Deploy, 12 Oct 2026.** The first production deploy (fad19a7) returned 500 on every request: `@astrojs/vercel` 11.0.13 bundles rolldown into the function. It was reverted within about 4 minutes, then reapplied with the adapter pinned to 11.0.12 after a local smoke test of the built function (ADR-0004, "Adapter pin").
+
+**Production check, 12 Oct 2026 (f1-calc.kawishbit.com, 2bdfb19).**
+- (a) Verified: first request after the deploy `X-Vercel-Cache: MISS`, later requests `HIT` with the same `generatedAt`, so cached hits make no OpenF1 calls. Each deploy starts with an empty cache, so visitors get new code and fresh data at once.
+- Browsers receive `Cache-Control: public, max-age=0, must-revalidate` (Vercel strips `s-maxage`), so nobody keeps an older copy than the CDN's. Photos: browser 1 day, CDN `HIT` on repeat.
+- Live data correct: ANT 340 / RUS 238 / HAM 229 / VER 221, 17 of 23 rounds played, Singapore included.
+- (b) failed render after expiry, (c) `stale-while-revalidate`, (d) whether the photo's 30-day cache outlives the 3-day ISR `expiration`: still open; they need an OpenF1 outage or days of waiting to observe. Watch `X-Vercel-Cache` and the out-of-date notice after the next race weekend.
