@@ -17,9 +17,5 @@ Mathematical certainty of winning the championship regardless of all other remai
 _Avoid_: lock, secure
 
 **Round**:
-One Grand Prix weekend, comprising the Grand Prix and an optional sprint race. Cancelled weekends and testing are not rounds, and cancelled weekends do not consume a round number.
+One Grand Prix weekend, comprising the Grand Prix and an optional sprint race.
 _Avoid_: race weekend (ambiguous: a round contains races), GP
-
-**Played round**:
-A round whose Grand Prix result is already counted in the current standings. A race that has finished but whose points are not yet in the standings is still a remaining round.
-_Avoid_: finished round, completed round

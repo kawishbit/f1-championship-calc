@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/kawishbit/f1-championship-calc/actions/workflows/refresh.yml"><img src="https://img.shields.io/github/actions/workflow/status/kawishbit/f1-championship-calc/refresh.yml?branch=main&label=data%20refresh" alt="Data refresh workflow status"></a>
   <a href="https://github.com/kawishbit/f1-championship-calc/commits/main"><img src="https://img.shields.io/github/last-commit/kawishbit/f1-championship-calc" alt="Last commit"></a>
   <a href="./LICENSE"><img src="https://img.shields.io/github/license/kawishbit/f1-championship-calc" alt="License: MIT"></a>
   <img src="https://img.shields.io/badge/Astro-7-BC52EE?logo=astro&logoColor=white" alt="Astro 7">
@@ -30,23 +31,23 @@ Pick a driver — say Norris in P4 — and the solver answers the shortest path 
 
 ## How it works
 
-Everything comes from [OpenF1](https://openf1.org) and is read when a visitor's request misses Vercel's cache (`src/lib/load-snapshot.ts`): standings from `championship_drivers` / `championship_teams`, the calendar and sprint weekends from `meetings` / `sessions`, names and team colours from `drivers`. The rendered page is cached by Vercel (ISR) until shortly after the next Grand Prix ends, never longer than 3 days, so a quiet week costs no API calls and a race is picked up soon after its points are published. If OpenF1 cannot be read (it answers 401 during live sessions and 429 under load), the page serves the committed `src/data/snapshot.json` with a short cache and an out-of-date notice. Driver photos are proxied from F1's CDN through `/drivers/*` and cached for 30 days. Pure functions in `src/lib/championship.ts` do the math (`availablePoints`, `leastEffortPath`, `projectStandings`, `clinchState`); `src/lib/snapshot.ts` turns OpenF1 responses into the data the UI renders; `src/components/Calculator.astro` renders the Astro UI. See ADR-0004.
+`scripts/snapshot.mjs` pulls standings and calendars from f1api.dev, OpenF1, and Jolpica into `src/data/snapshot.json`. Pure functions in `src/lib/championship.ts` do the math (`availablePoints`, `leastEffortPath`, `projectStandings`, `clinchState`); `src/components/Calculator.astro` renders the Astro UI. Data refreshes every 6 hours via `.github/workflows/refresh.yml` (plus manual runs); a run commits only when the data changed, which triggers the Vercel redeploy. New seasons are picked up automatically once the API publishes the grid.
 
-Glossary: **standings** (points table) · **scenario** (your assigned finishes for remaining rounds) · **clinch** (mathematically certain regardless of other outcomes) · **round** (one Grand Prix weekend, optionally with a sprint; cancelled weekends don't count) · **played round** (a round whose result is already in the standings).
+Glossary: **standings** (points table) · **scenario** (your assigned finishes for remaining rounds) · **clinch** (mathematically certain regardless of other outcomes) · **round** (one Grand Prix weekend, optionally with a sprint).
 
 ## Run it
 
 ```bash
 pnpm install
 pnpm dev        # local app
-pnpm snapshot   # refresh the committed fallback, src/data/snapshot.json
-pnpm test       # championship, solver and OpenF1 transform tests
+pnpm snapshot   # refresh src/data/snapshot.json
+pnpm test       # championship + solver tests
 pnpm build
 ```
 
 ## Limits
 
-Unofficial fan project, not affiliated with Formula 1. Clinch math is points-only (wins break display ties, not clinch math). Driver photos via the F1 CDN, found through OpenF1.
+Unofficial fan project, not affiliated with Formula 1. Clinch math is points-only (wins break display ties, not clinch math). Driver photos via the F1 CDN / OpenF1.
 
 ## License
 

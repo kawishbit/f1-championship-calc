@@ -150,6 +150,3 @@ vite.config.ts.timestamp-*
 
 # JetBrains settings
 .idea/
-
-# Vercel build output (adapter)
-.vercel/
