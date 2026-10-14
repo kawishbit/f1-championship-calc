@@ -470,34 +470,58 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
          <p class="note">${result.earliest ? `Earliest possible: after the ${roundName(result.earliest)}.` : `P${target} is out of reach this season, even winning everything.`}</p>`;
        return;
      }
-     // Best case: the contender wins everything up to and including the chosen round.
+     // One row per range of the contender's own result, each with exactly what has to happen.
+     const who = me.label;
      const counted = rounds.slice(0, remaining.indexOf(after) + 1);
      const sprints = counted.some((r) => r.sprint);
-     const single = counted.length === 1;
-     const span = single ? (sprints ? " across the sprint and the Grand Prix" : "") : ` across these ${counted.length} rounds`;
-     const mine = teams
-       ? `scores ${result.scores} (${single && !sprints ? "a 1-2" : "a 1-2 in every race"})`
-       : single
-         ? sprints ? "wins the sprint and the Grand Prix" : "wins"
-         : `wins every Grand Prix${sprints ? " and sprint" : ""} up to then`;
-     const cap = (c) =>
-       c.position != null
-         ? c.position > POINTS.race.length ? "doesn't score" : `finishes P${c.position} or lower`
-         : c.maxPoints === 0 ? `scores nothing${span}` : `scores ${c.maxPoints} or fewer${span}`;
+     const where = counted.length === 1
+       ? sprints ? ` across the sprint and Grand Prix at the ${after.name}` : ` at the ${after.name}`
+       : ` across the ${counted.length} rounds up to the ${after.name}`;
+     const out = POINTS.race.length + 1;
+     const place = (p) => (p >= out ? "outside the points" : `P${p}`);
+     const beats = (m, rival) =>
+       m > 0 ? `outscores ${rival} by ${m} or more` : m === 0 ? `isn't outscored by ${rival}` : `isn't outscored by ${rival} by more than ${-m}`;
+     // One less is enough on countback: a draw at 0, a deficit of up to -m below it.
+     const slack = (m) => (m > 0 ? `${m} is enough` : m === 0 ? "a draw is enough" : `being outscored by up to ${-m} is fine`);
+     const ruleText = (c) => {
+       const rival = name(c.id);
+       return `${who} ${beats(c.margin, rival)}${c.countbackMargin != null ? ` (${slack(c.countbackMargin)} if ${who} ends up with more wins than ${rival} can reach)` : ""}`;
+     };
+     const row = (when, then) => `<li><span class="when">If ${who} ${when}</span> ${then}</li>`;
+     const cannot = `${who} can't clinch P${target} after this round.`;
+     const alone = `${who} clinches P${target}, whatever anyone else does.`;
+     let rows;
+     if (result.finishes) {
+       const finish = (b) =>
+         b.from === 1 && b.to === 1 ? "wins:"
+           : b.from === 1 ? `finishes ${place(b.to)} or higher:`
+           : b.to === out ? (b.from === out ? "finishes outside the points:" : `finishes ${place(b.from)} or lower:`)
+           : b.from === b.to ? `finishes ${place(b.from)}:` : `finishes ${place(b.from)} to ${place(b.to)}:`;
+       const limits = (cs) => joinNames(cs.map((c) => `${name(c.id)} finishes ${c.position >= out ? "outside the points" : `P${c.position} or lower`}`));
+       rows = result.finishes.map((b) =>
+         row(finish(b), b.conditions == null ? cannot : b.conditions.length === 0 ? alone : `${who} clinches P${target} only if ${limits(b.conditions)}.`));
+     } else {
+       const { alone: enough, floor, most } = result.points;
+       const top = (enough ?? most + 1) - 1;
+       rows = [
+         enough != null ? row(`scores ${enough === most ? `all ${most}` : `${enough} or more`} points${where}:`, alone) : "",
+         floor <= top
+           ? row(`scores ${floor === top ? floor : `${floor} to ${top}`} points${where}:`, `${who} clinches P${target} only if ${result.rules.length > 1 ? "all of these hold" : "this holds"}:<ul class="rules">${result.rules.map((c) => `<li>${ruleText(c)}.</li>`).join("")}</ul>`)
+           : "",
+         floor > 0 ? row(`scores fewer than ${floor} points${where}:`, cannot) : "",
+       ];
+     }
      const others = [
-       result.ahead.length ? `${joinNames(result.ahead.map(name))} may finish ahead.` : "",
-       result.conditions.length ? "Any result for everyone else." : "No other result matters.",
+       result.ahead.length ? `${joinNames(result.ahead.map(name))} can still finish ahead of ${who}: P${target} only needs everyone else behind.` : "",
+       "Anyone not named can finish anywhere.",
      ].filter(Boolean).join(" ");
-     const rules = result.conditions.map((c) =>
-       `<li>Outscore ${name(c.id)} by ${c.margin}+${c.countbackMargin != null ? ` (or ${c.countbackMargin} if ${me.label} ends up with more wins than ${name(c.id)} can reach)` : ""}</li>`);
      answerEl.innerHTML = `
-       <p class="verdict">${me.label} clinches P${target} after the ${after.name} if:</p>
-       <ul class="conds">
-         <li><strong>${me.label}</strong> ${mine}</li>
-         ${result.conditions.map((c) => `<li><strong>${name(c.id)}</strong> ${cap(c)}</li>`).join("")}
-       </ul>
+       <p class="verdict">How ${who} clinches P${target} after the ${after.name}</p>
+       <ul class="conds">${rows.join("")}</ul>
        <p class="note">${others}</p>
-       ${rules.length ? `<p class="rule-head">The general rule${single ? "" : `, across these ${counted.length} rounds`}</p><ul class="rules">${rules.join("")}</ul>` : ""}
+       ${result.finishes && result.rules.length
+         ? `<p class="rule-head">The general rule, in points${where}</p><ul class="rules">${result.rules.map((c) => `<li>${ruleText(c)}.</li>`).join("")}</ul>`
+         : ""}
        ${result.earliest !== after.raceId ? `<p class="note">Earliest possible: after the ${roundName(result.earliest)}.</p>` : ""}`;
    }
 
@@ -749,12 +773,14 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   }
   .stat b { display: block; font-size: 1.25rem; font-style: italic; font-variant-numeric: tabular-nums; }
   .stat span { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); font-weight: 700; }
-  .verdict { margin: 0 0 0.5rem; font-weight: 700; }
-  .conds, .rules { margin: 0 0 0.6rem; padding-left: 1.1rem; display: grid; gap: 0.25rem; }
+  .verdict { margin: 0 0 0.6rem; font-weight: 700; }
+  .conds, .rules { margin: 0 0 0.7rem; padding-left: 1.1rem; display: grid; gap: 0.45rem; }
   .conds li::marker { color: var(--f1red); }
-  .rules { font-size: 0.85rem; color: var(--muted); }
-  .rule-head { margin: 0.7rem 0 0.3rem; color: var(--muted); text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.06em; font-weight: 700; }
-  .answer .note { margin: 0 0 0.4rem; font-size: 0.82rem; color: var(--faint); }
+  .conds .when { display: block; font-weight: 700; }
+  .conds .rules { margin: 0.3rem 0 0; }
+  .rules { font-size: 0.95rem; color: var(--ink); }
+  .rule-head { margin: 0.8rem 0 0.35rem; color: var(--muted); text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.06em; font-weight: 700; }
+  .answer .note { margin: 0 0 0.5rem; font-size: 0.95rem; color: var(--muted); }
   .answer > :last-child { margin-bottom: 0; }
 
    /* Scenario builder below the solver */

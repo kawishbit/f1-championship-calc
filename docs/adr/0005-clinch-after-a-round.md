@@ -8,6 +8,8 @@ Clinch Pn is tested **one rival at a time**. A rival is a threat if they alone c
 
 A points tie counts in the contender's favour only when the rival can't match the contender's wins even by winning every remaining Grand Prix. Countback beyond wins (second places and so on) is ignored, so a tie that only those would decide is not counted as clinched.
 
+The answer is laid out **by the contender's own result**, not as a single best case. For one Grand Prix with no sprint (drivers view), each range of finishes says exactly what has to happen: "P7 or higher: clinched, whatever anyone else does; P8 or lower: only if Lawson finishes P2 or lower". Otherwise (several rounds, a sprint weekend, or the constructors view) the ranges are in points, with a points margin for each rival. The first version led with "if the contender wins everything". That was correct, but it read as a requirement: it said Verstappen needed a win to clinch P8 when he needed nothing at all as long as Lawson didn't win. Whenever the contender doesn't win everything, rivals are assumed able to win those races, so the countback test then allows for their extra wins. This keeps each statement true, but it can ask for one point more than strictly needed.
+
 ## Considered Options
 
 - **Exact joint search** (rivals sharing the same finishes): this would catch every clinch for P2 and below at the earliest possible round. But it's a search over how the remaining points could be split among rivals, it's hard to explain in a single sentence, and it changes nothing for P1, which is the question asked most.

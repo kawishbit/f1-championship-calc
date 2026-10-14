@@ -52,4 +52,6 @@ The least-effort bound assumes every rival stops scoring, so in practice it tell
 
 ## Comments
 
+- Follow-up (14 Oct 2026): the "best case" headline read as a requirement. Verstappen, P8, after the United States Grand Prix said "Verstappen wins" when P7 or higher clinches on its own, and anything lower only needs Lawson not to win. The answer is now one row per range of the contender's result, in finishes for one Grand Prix with no sprint and in points otherwise (ADR-0005). The note and general-rule text are larger.
+
 - Implemented in `clinchAfterRound` (`src/lib/championship.ts`, tests in `tests/clinch-after-round.test.ts`) and `renderSolver` in `Calculator.astro`. Hamilton may score 11 at Austin, not 10: an 11-point tie still goes to Antonelli on wins, and either way the condition is P5 or lower. Drivers who have left the grid are never given a condition, because they can't score again. The Scenario rule is not unit-tested: the answer reads only the real standings (`entries()`), and this was checked by hand in the browser.
