@@ -2,7 +2,7 @@
  // system, so the snapshot embeds it (scripts/snapshot.mjs) and the UI passes
  // it through; these constants are the compiled-in fallback + test anchor.
  // Fastest lap pays 0 since 2025 — kept as an explicit zero slot so avail
- // boxes + solver pick it up automatically if reintroduced (never paid in sprints).
+ // boxes + clinch answer pick it up automatically if reintroduced (never paid in sprints).
  export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1] as const;
  export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1] as const;
  export const FASTEST_LAP_POINTS = 0;
@@ -75,6 +75,8 @@
   id: string;
   points: number;
   wins: number;
+  /** Left the grid: keeps the points and wins already scored, but can't add to them. */
+  departed?: boolean;
 }
 
 export interface RoundInfo {
@@ -129,157 +131,103 @@ export interface RoundInfo {
      return sum + points.race[0] + points.fastestLap + (r.sprint ? points.sprint[0] : 0);
    }, 0);
  }
-export interface EffortAssignment {
-  raceId: string;
-  /** 1-based Grand Prix finishing position, or null when the contender skips scoring. */
-  racePosition: number | null;
-  sprintPosition: number | null;
+
+export interface ClinchCondition {
+  id: string;
+  /** Best case: most points the rival may score up to and including the chosen round. */
+  maxPoints: number;
+  /** The same cap as a Grand Prix finish ("P9 or lower"): one Grand Prix with no sprint, drivers view only. */
+  position: number | null;
+  /** General rule: outscore the rival by at least this much up to and including the chosen round. */
+  margin: number;
+  /** One less, enough when the contender ends with more wins than the rival can reach; null when that can't happen. */
+  countbackMargin: number | null;
 }
 
-export interface EffortResult {
-  possible: boolean;
-  /** Final position the contender lands on with this path. */
-  position: number;
-  pointsNeeded: number;
-  winsAdded: number;
-  assignments: EffortAssignment[];
-}
-
- type Slot = { raceId: string; sprint: boolean; points: number; position: number; position2: number | null };
+export type ClinchAnswer =
+  | { kind: "clinched" }
+  /** `scores`: the contender's best-case points; `ahead`: the rivals let through for P2 and below (most points first). */
+  | { kind: "possible"; earliest: string; scores: number; ahead: string[]; conditions: ClinchCondition[] }
+  | { kind: "impossible"; earliest: string | null };
 
 /**
- * Least-effort path: fewest contender points that reach `target` (P1..Pn),
- * assuming every rival scores the minimum possible (stays on current points).
- * Each round offers one race prize and at most one sprint prize; a group
- * knapsack picks the cheapest prize set reaching each points bar, and ties
- * are winnable only on strictly more wins (FIA order). Positions are prizes
- * (P1..P10 race, P1..P8 sprint), never invented rival results. Returns
- * `possible: false` with the best reachable position when out of reach.
+ * Glossary `clinch after a round` (ADR-0005): what has to happen up to and
+ * including `afterRaceId` for the contender to clinch P`target`. Best case:
+ * the contender wins every Grand Prix and sprint up to then. Each rival is
+ * tested on its own; the target-1 rivals with the most points are let through.
  */
- export function leastEffortPath(
-   current: Standing[],
-   contenderId: string,
-   target: number,
-   rounds: RoundInfo[],
-   points: PointsSystem = DEFAULT_POINTS,
-   cars = 1,
- ): EffortResult {
-   if (cars !== 1 && cars !== 2) throw new Error(`unsupported cars: ${cars}`);
-   const me = current.find((s) => s.id === contenderId);
-   if (!me) throw new Error(`unknown id: ${contenderId}`);
-   const clamped = Math.min(Math.max(Math.trunc(target) || 1, 1), current.length);
-   const others = current.filter((s) => s.id !== contenderId);
-   /** Final rank of the contender at `total` when rivals stay on current points. */
-   const rankAt = (total: number, wins: number) =>
-     1 + others.filter((r) => r.points > total || (r.points === total && r.wins > wins)).length;
+export function clinchAfterRound(
+  current: Standing[],
+  contenderId: string,
+  target: number,
+  rounds: RoundInfo[],
+  afterRaceId: string,
+  points: PointsSystem = DEFAULT_POINTS,
+  cars = 1,
+): ClinchAnswer {
+  const me = current.find((s) => s.id === contenderId);
+  if (!me) throw new Error(`unknown id: ${contenderId}`);
+  const at = rounds.findIndex((r) => r.raceId === afterRaceId);
+  if (at < 0) throw new Error(`unknown round: ${afterRaceId}`);
+  const n = Math.min(Math.max(Math.trunc(target) || 1, 1), current.length);
+  const rivals = current
+    .filter((s) => s.id !== contenderId)
+    .sort((a, b) => b.points - a.points || b.wins - a.wins);
+  const ahead = rivals.slice(0, n - 1).map((r) => r.id);
+  const held = rivals.slice(n - 1);
 
-   // One prize per event: each round offers one race prize and (sometimes) one
-   // sprint prize. Groups keep the mutually-exclusive options per event.
-   // Fastest lap is a free best-case bonus (banked every round, never contested
-   // in the knapsack): it lowers every bar by rounds.length * fl and is added
-   // back to the reported totals. Zero today, so all of this is identity.
-   // cars = 2 (teams view): one event pays the combined points of both cars —
-   // every single finish plus every distinct pair (P1+P2 = 43 race, 8+7 = 15
-   // sprint), since the cheapest cover for a small gap may be one car alone.
-   const flPerRace = points.fastestLap;
-   const freeFL = rounds.length * flPerRace;
-   const pairOpts = (table: readonly number[]) => {
-     const opts: Array<{ points: number; position: number; position2: number | null }> = [];
-     for (let i = 0; i < table.length; i++) opts.push({ points: table[i], position: i + 1, position2: null });
-     if (cars === 2) {
-       for (let i = 0; i < table.length; i++)
-         for (let j = i + 1; j < table.length; j++)
-           opts.push({ points: table[i] + table[j], position: i + 1, position2: j + 1 });
-     }
-     return opts;
-   };
-   const groups: Slot[][] = [];
-   for (const r of rounds) {
-     groups.push(pairOpts(points.race).map((o) => ({ raceId: r.raceId, sprint: false, ...o })));
-     if (r.sprint) groups.push(pairOpts(points.sprint).map((o) => ({ raceId: r.raceId, sprint: true, ...o })));
-   }
-   const maxPoints = groups.reduce((sum, g) => sum + Math.max(...g.map((s) => s.points)), 0) + freeFL;
-   const winSlots = groups.filter((g) => !g[0].sprint).length;
+  // While the contender takes the top `cars` places, a rival tops out one place group lower.
+  const below = (table: readonly number[]) => table.slice(cars, 2 * cars).reduce((a, b) => a + b, 0);
 
-  /** Cheapest spend reaching `need` points (at most one prize per event). */
-  const spend = (need: number): { points: number; wins: number; taken: Slot[] } | null => {
-    if (need <= 0) return { points: 0, wins: 0, taken: [] };
-    let dp: Array<{ points: number; wins: number; taken: Slot[] } | null> = Array(need + 1).fill(null);
-    dp[0] = { points: 0, wins: 0, taken: [] };
-    for (const group of groups) {
-      const next = [...dp];
-      for (const slot of group) {
-        for (let v = need; v >= 0; v--) {
-          const cur = dp[v];
-          if (!cur) continue;
-          const nv = Math.min(need, v + slot.points);
-           const cand = {
-             points: cur.points + slot.points,
-             wins: cur.wins + (!slot.sprint && (slot.position === 1 || slot.position2 === 1) ? 1 : 0),
-             taken: [...cur.taken, slot],
-           };
-          const prev = next[nv];
-          if (!prev || cand.points < prev.points || (cand.points === prev.points && cand.wins > prev.wins)) next[nv] = cand;
-        }
+  /** Best case after the first `count` rounds; null when some held rival can't be held. */
+  const bestCase = (count: number): ClinchCondition[] | null => {
+    const counted = rounds.slice(0, count);
+    const after = rounds.slice(count);
+    const gain = availablePoints(counted, points, cars).total;
+    const wins = me.wins + counted.length;
+    const availAfter = availablePoints(after, points, cars).total;
+    const rivalMax = counted.reduce((sum, r) => sum + below(points.race) + (r.sprint ? below(points.sprint) : 0), 0);
+    const single = cars === 1 && counted.length === 1 && !counted[0].sprint;
+    const conditions: ClinchCondition[] = [];
+    for (const r of held) {
+      // A rival who has left the grid stays on their current points and wins.
+      const open = r.departed ? 0 : availAfter;
+      const slack = me.points + gain - (r.points + open);
+      const countback = wins > r.wins + (r.departed ? 0 : after.length);
+      const cap = countback ? slack : slack - 1;
+      if (cap < 0) return null;
+      if (r.departed || cap >= rivalMax) continue;
+      let position: number | null = null;
+      if (single) {
+        const i = points.race.findIndex((p) => p <= cap);
+        position = i < 0 ? points.race.length + 1 : i + 1;
       }
-      dp = next;
+      const margin = r.points + open - me.points + 1;
+      conditions.push({ id: r.id, maxPoints: cap, position, margin, countbackMargin: countback ? margin - 1 : null });
     }
-    return dp[need];
+    return conditions;
   };
 
-   const finish = (spent: { points: number; wins: number; taken: Slot[] }): EffortResult => {
-     const scored = spent.taken.length === 0 ? 0 : spent.points + freeFL;
-     const total = me.points + scored;
-     const wins = me.wins + spent.wins;
-     const byRound = new Map<string, EffortAssignment>();
-     for (const r of rounds) byRound.set(r.raceId, { raceId: r.raceId, racePosition: null, sprintPosition: null });
-     for (const slot of spent.taken) {
-       const a = byRound.get(slot.raceId)!;
-       if (slot.sprint) a.sprintPosition = slot.position;
-       else a.racePosition = slot.position;
-     }
-     return {
-       possible: true,
-       position: rankAt(total, wins),
-       pointsNeeded: scored,
-       winsAdded: spent.wins,
-       assignments: [...byRound.values()],
-     };
-   };
-
-   // Walk the bar down: first try beating the rival at (target - 1), i.e. the
-   // cheapest rival whose total we must exceed; ties are winnable only with
-   // strictly more wins (FIA order), otherwise we must outscore them by a point.
-   // Free fastest-lap points lower every bar: the knapsack only funds the rest.
-   const rivals = [...others].sort((a, b) => b.points - a.points || b.wins - a.wins);
-   const gates = [0, ...rivals.slice(0, clamped).map((r) => r.points)];
-   for (let beat = clamped - 1; beat >= 0; beat--) {
-     const barPoints = gates[beat + 1] ?? 0;
-     const solutions: Array<{ points: number; wins: number; taken: Slot[] }> = [];
-     const outright = spend(Math.max(0, barPoints - me.points + 1 - freeFL));
-     if (outright) solutions.push(outright);
-     for (const r of rivals.filter((x) => x.points === barPoints)) {
-       const tieNeed = barPoints - me.points - freeFL;
-       const tie = spend(Math.max(0, tieNeed));
-       if (tie && me.wins + tie.wins > r.wins) solutions.push(tie);
-     }
-     solutions.sort((a, b) => a.points - b.points || b.wins - a.wins);
-     const best = solutions[0];
-     if (best) {
-       const done = finish(best);
-       if (done.position <= clamped) return done;
-     }
-   }
-   // Unreachable: show the best possible final position at full spend.
-   const total = me.points + maxPoints;
-   const wins = me.wins + winSlots;
-   const best = groups.map((g) => g[0]);
-   return { ...finish({ points: maxPoints - freeFL, wins: winSlots, taken: best }), possible: false, position: rankAt(total, wins) };
+  // No rounds counted: every remaining point is still open, so this is "already clinched".
+  if (bestCase(0)) return { kind: "clinched" };
+  const conditions = bestCase(at + 1);
+  if (!conditions) {
+    let earliest: string | null = null;
+    for (let count = at + 2; count <= rounds.length && !earliest; count++) {
+      if (bestCase(count)) earliest = rounds[count - 1].raceId;
+    }
+    return { kind: "impossible", earliest };
+  }
+  let first = 1;
+  while (first < at + 1 && !bestCase(first)) first++;
+  const scores = availablePoints(rounds.slice(0, at + 1), points, cars).total;
+  return { kind: "possible", earliest: rounds[first - 1].raceId, scores, ahead, conditions };
 }
+
 export type ClinchState = "clinched" | "alive" | "eliminated";
 
 /**
- * Glossary `clinch`: mathematical certainty of winning regardless of all other
+ * Glossary `clinch` (P1): mathematical certainty of winning regardless of all other
  * remaining outcomes. Points-only (wins break display ties, not clinch math).
  */
 export function clinchState(

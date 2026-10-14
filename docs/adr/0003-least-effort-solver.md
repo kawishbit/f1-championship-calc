@@ -1,5 +1,7 @@
  # Least-effort bound (not the projection)
 
+> **Superseded by [ADR-0005](0005-clinch-after-a-round.md).** "What would it take" now answers what has to happen to clinch a position after a chosen round, and `leastEffortPath` is removed. The text below is kept as history.
+
  `leastEffortPath` in `src/lib/championship.ts` is a labeled best-case bound
  shown under the scenario builder ("What would it take"): fewest contender
  points reaching a target final position P1..Pn, assuming every rival scores
