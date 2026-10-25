@@ -2,7 +2,7 @@
 
 Supersedes ADR-0001 (hybrid data source with build-time snapshot) and ADR-0002 (vendored headshots).
 
-All data comes from OpenF1 (`api.openf1.org`): schedule from `meetings` and `sessions`, standings from `championship_drivers` and `championship_teams`, names, colours and headshots from `drivers`. f1api.dev (stopped updating after the Singapore GP) and Jolpica (sprint flags only) are removed. The GitHub Actions refresh job is removed. The page is rendered on demand with `@astrojs/vercel` ISR: Vercel caches the HTML, and the page picks its own `s-maxage` so the cache is valid until the next Grand Prix ends plus about 3 hours (OpenF1's championship rows exist for Race sessions only, so sprints don't trigger a refresh), capped at 3 days. Headshots are served by a same-origin route `/drivers/<F1 CDN path>` that fetches the photo from F1's CDN and caches it for about 30 days.
+All data comes from OpenF1 (`api.openf1.org`): schedule from `meetings` and `sessions`, standings from `championship_drivers` and `championship_teams`, names, colours and headshots from `drivers`. f1api.dev (stopped updating after the Singapore GP) and Jolpica (sprint flags only) are removed. The GitHub Actions refresh job is removed. The page is rendered on demand with `@astrojs/vercel` ISR: Vercel caches the HTML, and the page picks its own `s-maxage` so the cache is valid until the next Grand Prix ends plus 30 minutes (OpenF1's championship rows exist for Race sessions only, so sprints don't trigger a refresh), capped at 3 days. Headshots are served by a same-origin route `/drivers/<F1 CDN path>` that fetches the photo from F1's CDN and caches it for about 30 days.
 
 ## Considered Options
 
@@ -15,6 +15,8 @@ All data comes from OpenF1 (`api.openf1.org`): schedule from `meetings` and `ses
 ## Failure behaviour
 
 OpenF1 returns 401 to unauthenticated callers during live sessions and may return 429. If a render can't fetch, the page serves the committed `snapshot.json` (refreshed by hand with `pnpm run snapshot`, so it can be old), with a short `s-maxage` of about 5 minutes and a notice that data may be out of date. The race-aware expiry means refreshes normally land after a session ends, when OpenF1 is open. How Vercel treats a failed regeneration and `stale-while-revalidate` is not documented, so the first implementation verifies it on a preview deployment.
+
+The margin after a race was first 3 hours. After the 2026 United States GP that kept the pre-race standings up for 3 hours although OpenF1 had the results within minutes, so it is now 30 minutes and late results are left to the 10-minute retry. A render that falls inside OpenF1's live-session lockout falls back for 5 minutes and then tries again.
 
 Two cache rules besides the race-aware expiry: a race that has just finished but is missing from the standings is retried every 10 minutes for 24 hours, and while the page still shows last season's final table (new year, no new grid yet) it is cached for 1 hour so the new calendar is picked up promptly. A season where races have finished but no standings rows can be read is treated as a failure and falls back, never shown as a zero-point table.
 

@@ -176,9 +176,9 @@ describe("cache lifetime", () => {
     assert.equal(at("2026-10-12T08:00:00Z"), 3 * DAY); // the day after Singapore, next race in 13 days
   });
 
-  it("runs until 3 hours after the next Grand Prix ends once that is closer than 3 days", () => {
-    // United States GP ends 2026-10-25 22:00Z, so results are expected from 01:00Z on the 26th.
-    assert.equal(at("2026-10-24T12:00:00Z"), 37 * 3600);
+  it("runs until 30 minutes after the next Grand Prix ends once that is closer than 3 days", () => {
+    // United States GP ends 2026-10-25 22:00Z, so results are expected from 22:30Z.
+    assert.equal(at("2026-10-24T12:00:00Z"), 34.5 * 3600);
   });
 
   it("retries every 10 minutes while a race that just finished is missing from the standings", () => {

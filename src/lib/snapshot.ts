@@ -237,13 +237,15 @@ export function buildSnapshot(raw: RawSeason, now: Date): Snapshot | null {
 
 const HOUR = 3600;
 const MAX_CACHE_SECONDS = 3 * 24 * HOUR;
-const RESULTS_DELAY_SECONDS = 3 * HOUR; // OpenF1 publishes results "a few minutes" after the F1 site; allow generously
+// OpenF1 publishes results "a few minutes" after the flag, and the scheduled end is already
+// past the real finish. Anything later is caught by the 10-minute retry below.
+const RESULTS_DELAY_SECONDS = 30 * 60;
 const RETRY_SECONDS = 10 * 60;
 const GIVE_UP_MS = 24 * HOUR * 1000;
 
 /**
  * How long a rendered page may be served from Vercel's cache. Standings only move when a
- * Grand Prix is scored, so the page stays cached until shortly after the next one ends
+ * Grand Prix is scored, so the page stays cached until 30 minutes after the next one ends
  * (never more than 3 days). A race that has just finished but is not in the standings yet is
  * retried every 10 minutes for a day.
  */
