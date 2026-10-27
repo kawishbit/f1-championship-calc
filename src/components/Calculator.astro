@@ -97,7 +97,7 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
   </main>
 
   <footer>
-    <p>Unofficial fan project. Data: OpenF1. Photos: F1 CDN.</p>
+    <p>Unofficial fan project. Data: <a href="https://openf1.org">OpenF1</a>. Photos: <a href="https://www.formula1.com/en/drivers">F1 CDN</a>. <a href="https://github.com/kawishbit/f1-championship-calc">Source on GitHub</a>.</p>
   </footer>
 </div>
 
@@ -888,6 +888,8 @@ const updated = new Date(snapshot.generatedAt).toLocaleDateString("en-GB", {
 
   footer { max-width: 1200px; margin: 0 auto; padding: 0 clamp(0.9rem, 4vw, 2.5rem) 3rem; }
   footer p { margin: 0; color: var(--faint); font-size: 0.75rem; }
+  footer a { color: var(--muted); text-underline-offset: 2px; }
+  footer a:hover { color: var(--ink); }
 
   /* Desktop: sticky standings, roomier rows */
   @media (min-width: 901px) {
