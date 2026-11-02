@@ -2,6 +2,7 @@
 // All decisions about the data live in snapshot.ts; this file only moves bytes.
 import {
   finishedRaceSessions,
+  hasDetails,
   latestStartedSession,
   type ChampionshipDriver,
   type ChampionshipTeam,
@@ -88,7 +89,7 @@ export async function fetchSeason(year: number, now: Date, opts: FetchOptions = 
     .filter(isGrandPrix)
     .sort((a, b) => a.date_start.localeCompare(b.date_start))[0];
 
-  const onGrid = new Set(drivers.map((d) => d.driver_number));
+  const onGrid = new Set(drivers.filter(hasDetails).map((d) => d.driver_number));
   const departedDrivers: DriverRow[] = [];
   for (const row of championshipDrivers) {
     if (onGrid.has(row.driver_number) || !firstRace) continue;
@@ -96,7 +97,7 @@ export async function fetchSeason(year: number, now: Date, opts: FetchOptions = 
       `drivers?driver_number=${row.driver_number}&session_key>=${firstRace.session_key}`,
       opts,
     );
-    const last = history.sort((a, b) => a.session_key - b.session_key).at(-1);
+    const last = history.filter(hasDetails).sort((a, b) => a.session_key - b.session_key).at(-1);
     if (last) departedDrivers.push(last);
   }
 

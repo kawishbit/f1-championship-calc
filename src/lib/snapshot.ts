@@ -159,16 +159,24 @@ function buildRounds(raw: RawSeason): SnapshotRound[] {
   }));
 }
 
+/**
+ * OpenF1 sometimes lists a reserve driver for a session with the team and names nulled out
+ * (seen for Hirakawa at the 2026 Mexico City GP). Such a row cannot be shown, so callers treat
+ * the driver as not on the grid and use their last complete row instead.
+ */
+export const hasDetails = (d: DriverRow) => Boolean(d.team_name && d.first_name && d.last_name && d.name_acronym);
+
 export function buildSnapshot(raw: RawSeason, now: Date): Snapshot | null {
-  const gridByNumber = new Map(raw.drivers.map((d) => [d.driver_number, d]));
-  const departedByNumber = new Map(raw.departedDrivers.map((d) => [d.driver_number, d]));
+  const grid = raw.drivers.filter(hasDetails);
+  const gridByNumber = new Map(grid.map((d) => [d.driver_number, d]));
+  const departedByNumber = new Map(raw.departedDrivers.filter(hasDetails).map((d) => [d.driver_number, d]));
   const rounds = buildRounds(raw);
-  if (rounds.length === 0 || raw.drivers.length === 0) return null; // season not published yet
+  if (rounds.length === 0 || grid.length === 0) return null; // season not published yet
 
   // Before the first race there are no championship rows: everyone starts on zero, in grid order.
   const standings = raw.championshipDrivers.length
     ? [...raw.championshipDrivers].sort((a, b) => a.position_current - b.position_current)
-    : raw.drivers.map((d, i) => ({ driver_number: d.driver_number, position_current: i + 1, points_current: 0 }));
+    : grid.map((d, i) => ({ driver_number: d.driver_number, position_current: i + 1, points_current: 0 }));
 
   // Wins are Grand Prix victories only: OpenF1 returns the position-1 result of every
   // session (practice, qualifying, sprint), so keep just the Race sessions.
@@ -208,7 +216,7 @@ export function buildSnapshot(raw: RawSeason, now: Date): Snapshot | null {
   }
   const teamStandings = raw.championshipTeams.length
     ? raw.championshipTeams
-    : [...new Set(raw.drivers.map((d) => d.team_name))].map((team_name, i) => ({
+    : [...new Set(grid.map((d) => d.team_name))].map((team_name, i) => ({
         team_name,
         position_current: i + 1,
         points_current: 0,

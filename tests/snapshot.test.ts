@@ -45,6 +45,20 @@ describe("driver standings", () => {
     assert.equal(buildSnapshot(odd, NOW)!.drivers.find((d) => d.code === "VER")?.photo, null);
   });
 
+  it("fall back to a reserve driver's last complete row when OpenF1 nulls their details", () => {
+    const ver = raw.drivers.find((d) => d.name_acronym === "VER")!;
+    const blank = { ...ver, driver_number: 50, name_acronym: "HIR", team_name: null, first_name: null, last_name: null, team_colour: null, headshot_url: null } as unknown as RawSeason["drivers"][number];
+    const earlier = { ...ver, driver_number: 50, name_acronym: "HIR", first_name: "Ryo", last_name: "Hirakawa", team_name: "Haas F1 Team" };
+    const withReserve: RawSeason = {
+      ...raw,
+      drivers: [...raw.drivers, blank],
+      departedDrivers: [...raw.departedDrivers, earlier],
+      championshipDrivers: [...raw.championshipDrivers, { driver_number: 50, position_current: 23, points_current: 0 }],
+    };
+    const hir = buildSnapshot(withReserve, NOW)!.drivers.find((d) => d.code === "HIR");
+    assert.deepEqual([hir?.name, hir?.teamName, hir?.departed], ["Ryo Hirakawa", "Haas F1 Team", true]);
+  });
+
   it("keep a departed driver in the standings with their last known team, flagged", () => {
     const { drivers } = build();
     assert.equal(drivers.length, 23);
